@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
 import { getSupabaseClient } from '@/lib/supabaseClient'
 import { isValidRole, normalizeRole, Role } from '@/lib/roles'
@@ -105,14 +105,62 @@ const dashboardsByRole: Record<Role, {
   }
 }
 
-const commonTools = [
-  { label: 'View Compliance Docs', icon: '🧾', detail: 'Access all compliance and legal documents' },
-  { label: 'Check Payment Status', icon: '💰', detail: 'Monitor payment milestones and approvals' },
-  { label: 'Review Shipment Timeline', icon: '⏱️', detail: 'Track ETA and logistics updates' },
-  { label: 'Open Account Notes', icon: '🗒️', detail: 'Read team briefing notes and updates' },
-  { label: 'Message Support Team', icon: '💬', detail: 'Contact your dedicated account manager' },
-  { label: 'Export Report', icon: '📊', detail: 'Download period activity and metrics' }
-]
+const toolsData: Record<string, { title: string; icon: string; items: any[] }> = {
+  'View Compliance Docs': {
+    title: 'Compliance Documents',
+    icon: '🧾',
+    items: [
+      { label: 'Certificate of Origin', status: 'Valid', issued: '2024-06-01', details: 'Issued by Chamber of Commerce' },
+      { label: 'Quality Certification', status: 'Valid', issued: 'ISO 9001:2015', details: 'Expires 2025-12-31' },
+      { label: 'Factory Audit Report', status: 'Current', issued: '2024-05-15', details: 'Last inspection passed' }
+    ]
+  },
+  'Check Payment Status': {
+    title: 'Payment Milestones',
+    icon: '💰',
+    items: [
+      { label: 'Deposit (30%)', status: '✓ Paid', value: '$15,000', date: '2024-05-20' },
+      { label: 'Production (50%)', status: '⏳ Due', value: '$25,000', date: '2024-06-15' },
+      { label: 'Final (20%)', status: '⊘ Pending', value: '$10,000', date: 'On shipment' }
+    ]
+  },
+  'Review Shipment Timeline': {
+    title: 'Shipment Tracking',
+    icon: '⏱️',
+    items: [
+      { label: 'Order Confirmed', status: 'Complete', date: 'May 20, 2024', icon: '✓' },
+      { label: 'In Production', status: 'In Progress', date: 'Est. June 10', icon: '⚙' },
+      { label: 'Shipped', status: 'Pending', date: 'Est. June 15', icon: '📦' }
+    ]
+  },
+  'Open Account Notes': {
+    title: 'Account Notes',
+    icon: '🗒️',
+    items: [
+      { author: 'Account Manager', date: 'Jun 7, 2024', note: 'Client requested expedited shipment. Approved with $500 surcharge.' },
+      { author: 'Quality Team', date: 'Jun 5, 2024', note: 'Final QC inspection passed. All units meet specifications.' },
+      { author: 'Logistics', date: 'May 28, 2024', note: 'Special packaging confirmed for fragile items.' }
+    ]
+  },
+  'Message Support Team': {
+    title: 'Support Contacts',
+    icon: '💬',
+    items: [
+      { name: 'Sarah Chen', role: 'Account Manager', status: 'Available now', response: '2min' },
+      { name: 'James Wilson', role: 'Logistics Specialist', status: 'Back in 30min', response: '5min' },
+      { name: 'Maria Garcia', role: 'Customer Success', status: 'Available', response: '3min' }
+    ]
+  },
+  'Export Report': {
+    title: 'Activity Report',
+    icon: '📊',
+    items: [
+      { metric: 'Total Orders', value: '12', period: 'May 2024' },
+      { metric: 'Total Value', value: '$450,000', period: 'May 2024' },
+      { metric: 'Avg Response Time', value: '2.1h', period: 'May 2024' }
+    ]
+  }
+}
 
 export default function Dashboard() {
   const { user, isSignedIn, isDemo } = useAuth()
@@ -122,18 +170,14 @@ export default function Dashboard() {
   const [mounted, setMounted] = useState(false)
   const [demoRole, setDemoRole] = useState<Role | null>(null)
   const [displayName, setDisplayName] = useState('Guest')
-  const [selectedAction, setSelectedAction] = useState<PrimaryAction | null>(null)
-  const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(null)
-  const [openToolIndex, setOpenToolIndex] = useState<number | null>(0)
-  const [actionFeedback, setActionFeedback] = useState('Choose an action to explore your workflow.')
-  const sourceRef = useRef<EventSource | null>(null)
-
   const [kpiList, setKpiList] = useState<KPI[]>([])
   const [taskList, setTaskList] = useState<DashboardTask[]>([])
-  const [activeActionPanel, setActiveActionPanel] = useState<PrimaryAction | null>(null)
-  const [actionLoading, setActionLoading] = useState(false)
-  const [actionCompleted, setActionCompleted] = useState(false)
-  const [actionProgress, setActionProgress] = useState(0)
+  const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(null)
+  const [activeToolKey, setActiveToolKey] = useState<string | null>(null)
+  const [activeActionModal, setActiveActionModal] = useState<PrimaryAction | null>(null)
+  const [actionModalStep, setActionModalStep] = useState(0)
+  const [actionModalData, setActionModalData] = useState<Record<string, string>>({})
+  const sourceRef = useRef<EventSource | null>(null)
 
   const addUpdate = (event: UpdateEvent) => {
     setUpdates((prev) => [event, ...prev].slice(0, 10))
@@ -164,200 +208,8 @@ export default function Dashboard() {
     return () => sourceRef.current?.close()
   }, [])
 
-  const handleActionClick = (action: PrimaryAction) => {
-    setSelectedAction(action)
-    setActiveActionPanel(action)
-    const roleText = displayRole ? ` (${displayRole})` : ''
-    setActionFeedback(`Ready to ${action.label.toLowerCase()}${roleText} — ${action.detail}. Click "Launch →" to execute.`)
-    tracker.log('action_click', action.label, action.detail, { role: displayRole, color: action.color })
-  }
-
-  const handleActionLaunch = (action: PrimaryAction) => {
-    if (actionLoading) return
-    setActionLoading(true)
-    setActionCompleted(false)
-    setActionProgress(0)
-    setActionFeedback(`Initializing ${action.label}…`)
-    tracker.log('button_click', `Launch ${action.label}`, action.detail, { displayRole })
-
-    let step = 0
-    const intervalId = window.setInterval(() => {
-      step += 1
-      setActionProgress(step * 20)
-      
-      // Progressive feedback messages during execution
-      if (step === 1) setActionFeedback(`Validating ${action.label} parameters…`)
-      else if (step === 2) setActionFeedback(`Processing with suppliers and partners…`)
-      else if (step === 3) setActionFeedback(`Updating inventory and compliance data…`)
-      else if (step === 4) setActionFeedback(`Recording transaction and archiving…`)
-      else if (step >= 5) {
-        window.clearInterval(intervalId)
-        setActionLoading(false)
-        setActionCompleted(true)
-        const successMsg = getActionSuccessMessage(action, displayRole)
-        setActionFeedback(successMsg)
-        addUpdate({ message: `${action.label} completed by ${displayName}.`, ts: Date.now(), status: 'success' })
-        applyActionResults(action, displayRole)
-      }
-    }, 180)
-  }
-
-  const getActionSuccessMessage = (action: PrimaryAction, role: Role | null): string => {
-    const lower = action.label.toLowerCase()
-    if (role === 'Buyer') {
-      if (lower.includes('rfq')) return `RFQ created and sent to ${Math.floor(Math.random() * 15) + 5} qualified suppliers. Awaiting bids.`
-      if (lower.includes('bid')) return `Comparison analysis complete: ${Math.floor(Math.random() * 5) + 3} suppliers submitted competitive bids. Reviews updated.`
-      if (lower.includes('shipment')) return `Shipment tracked: ETA confirmed ${Math.floor(Math.random() * 7) + 1} days from now. Customs pre-clearance filed.`
-    } else if (role === 'Seller') {
-      if (lower.includes('quote')) return `Commercial quote submitted to ${Math.floor(Math.random() * 8) + 2} buyer accounts. Awaiting responses.`
-      if (lower.includes('inventory')) return `Stock levels updated across 3 warehouses. ${Math.floor(Math.random() * 500) + 100} units confirmed available.`
-      if (lower.includes('analytics')) return `Sales analytics refreshed. Month-to-date revenue trending +${Math.floor(Math.random() * 25) + 10}% vs last period.`
-    } else if (role === 'Exporter') {
-      if (lower.includes('docs')) return `Export documentation filed with port authority. Filing reference: EXP-${Date.now().toString().slice(-6)}. Status: Pending review.`
-      if (lower.includes('pickup')) return `Logistics carrier confirmed. Pickup scheduled for ${['tomorrow', 'in 2 days', 'Friday'][Math.floor(Math.random() * 3)]}. 3 containers allocated.`
-      if (lower.includes('compliance')) return `Regulatory compliance check passed. All certifications current. Clearance probability: ${95 + Math.floor(Math.random() * 5)}%.`
-    }
-    return `${action.label} executed successfully. Workflow updated.`
-  }
-
-  const applyActionResults = (action: PrimaryAction, role: Role | null) => {
-    const lower = action.label.toLowerCase()
-    
-    // BUYER role actions
-    if (role === 'Buyer') {
-      if (lower.includes('rfq')) {
-        // Create RFQ affects bid review task and increases live RFQs KPI
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('bid')) {
-            return { ...task, status: 'In progress', progress: Math.min(100, task.progress + 40) }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Live RFQs')) {
-            const newVal = typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value
-            return { ...kpi, value: newVal, change: '+1', trend: 'up' }
-          }
-          return kpi
-        }))
-      } else if (lower.includes('compare')) {
-        // Compare bids completes the bid review task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('bid')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-      } else if (lower.includes('track')) {
-        // Track shipment completes shipping confirmation task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('shipping')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Avg Response')) {
-            return { ...kpi, change: '-5%', trend: 'up' }
-          }
-          return kpi
-        }))
-      }
-    }
-    // SELLER role actions
-    else if (role === 'Seller') {
-      if (lower.includes('quote')) {
-        // Submit quote completes the respond to RFQs task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('Respond')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Active Quotes')) {
-            const newVal = typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value
-            return { ...kpi, value: newVal, change: '+1', trend: 'up' }
-          }
-          return kpi
-        }))
-      } else if (lower.includes('inventory')) {
-        // Manage inventory updates the warehouse availability task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('warehouse')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Inventory')) {
-            return { ...kpi, change: 'Updated', trend: 'neutral' }
-          }
-          return kpi
-        }))
-      } else if (lower.includes('analytics')) {
-        // View analytics increases revenue KPI
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Revenue')) {
-            return { ...kpi, change: '+15%', trend: 'up' }
-          }
-          return kpi
-        }))
-      }
-    }
-    // EXPORTER role actions
-    else if (role === 'Exporter') {
-      if (lower.includes('file') || lower.includes('docs')) {
-        // File export docs completes customs filing task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('customs')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Docs Pending')) {
-            const newVal = typeof kpi.value === 'number' ? Math.max(0, kpi.value - 1) : kpi.value
-            return { ...kpi, value: newVal, change: '-1', trend: 'up' }
-          }
-          return kpi
-        }))
-      } else if (lower.includes('pickup') || lower.includes('schedule')) {
-        // Schedule pickup completes carrier booking task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('booking')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Shipments Active')) {
-            const newVal = typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value
-            return { ...kpi, value: newVal, change: '+1', trend: 'up' }
-          }
-          return kpi
-        }))
-      } else if (lower.includes('monitor') || lower.includes('compliance')) {
-        // Monitor compliance completes export manifests task
-        setTaskList((prev) => prev.map((task) => {
-          if (task.label.includes('manifests')) {
-            return { ...task, status: 'Complete', progress: 100 }
-          }
-          return task
-        }))
-        setKpiList((prev) => prev.map((kpi) => {
-          if (kpi.label.includes('Compliance Rate')) {
-            return { ...kpi, change: '+0.5%', trend: 'up' }
-          }
-          return kpi
-        }))
-      }
-    }
-  }
-
   useEffect(() => {
     if (typeof window === 'undefined') return
-
     const demoEnabled = localStorage.getItem('afrigo:demo') === 'true'
     const savedRole = localStorage.getItem('afrigo:role')
     setMounted(true)
@@ -374,12 +226,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isSignedIn || !user?.email) return
-
     const supabase = getSupabaseClient()
     if (!supabase) return
 
     let cancelled = false
-
     const loadProfile = async () => {
       const { data, error } = await supabase
         .from('users')
@@ -408,11 +258,7 @@ export default function Dashboard() {
     }
   }, [isSignedIn, user?.email])
 
-  const displayRole = isSignedIn
-    ? normalizeRole(user?.role)
-    : isDemo
-      ? demoRole
-      : null
+  const displayRole = isSignedIn ? normalizeRole(user?.role) : isDemo ? demoRole : null
   const displayData = displayRole ? dashboardsByRole[displayRole] : null
 
   useEffect(() => {
@@ -420,37 +266,80 @@ export default function Dashboard() {
     setTaskList(displayData.tasks)
     setKpiList(displayData.kpis)
     setSelectedTaskIndex(null)
-    setOpenToolIndex(null)
-    setSelectedAction(null)
-    setActiveActionPanel(null)
-    setActionCompleted(false)
-    setActionProgress(0)
-    setActionFeedback('Choose an action to explore your workflow.')
+    setActiveToolKey(null)
+    setActiveActionModal(null)
   }, [displayData])
 
-  const handleTaskView = (index: number) => {
-    setSelectedTaskIndex(index)
-    const task = taskList[index]
-    if (task) {
-      setActionFeedback(`Viewing task: ${task.label}`)
-      tracker.log('task_view', task.label, task.detail, { status: task.status, progress: task.progress })
-    }
+  const handleActionOpen = (action: PrimaryAction) => {
+    setActiveActionModal(action)
+    setActionModalStep(0)
+    setActionModalData({})
+    tracker.log('action_click', action.label, action.detail, { role: displayRole })
   }
 
-  const handleToolOpen = (index: number) => {
-    setOpenToolIndex(index)
-    const tool = commonTools[index]
-    setActionFeedback(`Opening ${tool.label}`)
-    tracker.log('action_click', tool.label, tool.detail)
+  const handleActionSubmit = (action: PrimaryAction) => {
+    setActionModalStep(1)
+    tracker.log('button_click', `Submit ${action.label}`, JSON.stringify(actionModalData), { role: displayRole })
+
+    setTimeout(() => {
+      setActionModalStep(2)
+      const successMsg = getActionSuccessMessage(action)
+      addUpdate({ message: `${action.label} completed by ${displayName}. ${successMsg}`, ts: Date.now(), status: 'success' })
+      applyActionResults(action)
+    }, 1200)
+
+    setTimeout(() => {
+      setActiveActionModal(null)
+    }, 2500)
+  }
+
+  const getActionSuccessMessage = (action: PrimaryAction): string => {
+    const lower = action.label.toLowerCase()
+    if (displayRole === 'Buyer') {
+      if (lower.includes('rfq')) return `RFQ #${Math.random().toString().slice(-4).toUpperCase()} sent to ${Math.floor(Math.random() * 15) + 5} suppliers.`
+      if (lower.includes('compare')) return `Best price from Supplier ${['A', 'B', 'C'][Math.floor(Math.random() * 3)]}.`
+      if (lower.includes('track')) return `ETA: ${Math.floor(Math.random() * 7) + 1} days`
+    } else if (displayRole === 'Seller') {
+      if (lower.includes('quote')) return `Quote sent to ${Math.floor(Math.random() * 5) + 2} buyers.`
+      if (lower.includes('inventory')) return `${Math.floor(Math.random() * 500) + 200} units added.`
+      if (lower.includes('analytics')) return `Revenue trending +${Math.floor(Math.random() * 25) + 10}%`
+    } else if (displayRole === 'Exporter') {
+      if (lower.includes('file')) return `Filed as EXP-${Date.now().toString().slice(-5)}`
+      if (lower.includes('schedule')) return `Pickup scheduled for ${['Tomorrow', 'Friday', 'Next Monday'][Math.floor(Math.random() * 3)]}`
+      if (lower.includes('monitor')) return `Compliance passed. Clearance: ${95 + Math.floor(Math.random() * 5)}%`
+    }
+    return `Completed successfully.`
+  }
+
+  const applyActionResults = (action: PrimaryAction) => {
+    const lower = action.label.toLowerCase()
+    setTaskList((prev) => prev.map((task) => {
+      const taskLower = task.label.toLowerCase()
+      if (lower.includes('rfq') && taskLower.includes('bid')) return { ...task, status: 'In progress', progress: Math.min(100, task.progress + 40) }
+      if (lower.includes('compare') && taskLower.includes('bid')) return { ...task, status: 'Complete', progress: 100 }
+      if (lower.includes('track') && taskLower.includes('shipping')) return { ...task, status: 'Complete', progress: 100 }
+      if (lower.includes('quote') && taskLower.includes('respond')) return { ...task, status: 'Complete', progress: 100 }
+      if (lower.includes('inventory') && taskLower.includes('warehouse')) return { ...task, status: 'Complete', progress: 100 }
+      if (lower.includes('file') && taskLower.includes('customs')) return { ...task, status: 'Complete', progress: 100 }
+      if (lower.includes('schedule') && taskLower.includes('booking')) return { ...task, status: 'Complete', progress: 100 }
+      if (lower.includes('monitor') && taskLower.includes('manifests')) return { ...task, status: 'Complete', progress: 100 }
+      return task
+    }))
+
+    setKpiList((prev) => prev.map((kpi) => {
+      if (lower.includes('rfq') && kpi.label.includes('Live RFQs')) return { ...kpi, value: typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value, change: '+1', trend: 'up' }
+      if (lower.includes('quote') && kpi.label.includes('Active Quotes')) return { ...kpi, value: typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value, change: '+1', trend: 'up' }
+      if (lower.includes('file') && kpi.label.includes('Docs Pending')) return { ...kpi, value: typeof kpi.value === 'number' ? Math.max(0, kpi.value - 1) : kpi.value, change: '-1', trend: 'up' }
+      return kpi
+    }))
   }
 
   if (!mounted) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--afrigo-bg)] px-4 text-center">
-        <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-10 shadow-xl">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--afrigo-bg)] px-4">
+        <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
           <p className="text-lg font-semibold text-[var(--afrigo-text)]">Loading dashboard…</p>
-          <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Preparing your live preview environment.</p>
-        </div>
+        </MotionDiv>
       </div>
     )
   }
@@ -458,60 +347,24 @@ export default function Dashboard() {
   if (!displayData) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <p className="text-xl font-semibold text-[var(--afrigo-primary-green)]">
-            {!isSignedIn && !isDemo ? 'Sign in required' : 'Select your role'}
-          </p>
-          {!isSignedIn ? (
-            <Link href="/sign-in" className="mt-4 inline-block rounded-lg bg-[var(--afrigo-primary-green)] px-6 py-2 text-white">
-              Sign in
-            </Link>
-          ) : (
-            <Link href="/role-selection" className="mt-4 inline-block rounded-lg bg-[var(--afrigo-primary-green)] px-6 py-2 text-white">
-              Choose role
-            </Link>
-          )}
-        </div>
+        <Link href="/role-selection" className="rounded-lg bg-[var(--afrigo-primary-green)] px-6 py-2 text-white">
+          Choose role
+        </Link>
       </div>
     )
   }
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.2 } }
-  }
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
-  }
+  const toolKeys = Object.keys(toolsData)
 
   return (
-    <MotionDiv
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-8 pb-12"
-    >
+    <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-8 pb-12">
       {/* HEADER */}
-      <MotionDiv
-        variants={itemVariants}
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.6 }}
-        className="rounded-3xl border border-[var(--afrigo-border)] bg-gradient-to-r from-[var(--afrigo-surface)] to-[var(--afrigo-bg)] p-8 shadow-xl"
-      >
+      <MotionDiv initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.6 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-gradient-to-r from-[var(--afrigo-surface)] to-[var(--afrigo-bg)] p-8 shadow-xl">
         <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-end">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">
-              Welcome back
-            </p>
-            <h1 className="mt-2 text-4xl font-black text-[var(--afrigo-primary-green)]">
-              {displayName}
-            </h1>
-            <p className="mt-3 max-w-2xl text-lg text-[var(--afrigo-text-secondary)]">
-              {displayData.hero} • Real-time updates on your trade operations
-            </p>
+            <p className="text-sm font-semibold uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Welcome back</p>
+            <h1 className="mt-2 text-4xl font-black text-[var(--afrigo-primary-green)]">{displayName}</h1>
+            <p className="mt-3 max-w-2xl text-lg text-[var(--afrigo-text-secondary)]">{displayData.hero} • Real-time trade operations</p>
           </div>
           <div className="rounded-2xl bg-[var(--afrigo-bg)] px-6 py-3">
             <p className="text-sm text-[var(--afrigo-text-secondary)]">Status: <span className="font-semibold text-[var(--afrigo-primary-green)]">{statusMessage}</span></p>
@@ -519,196 +372,232 @@ export default function Dashboard() {
         </div>
       </MotionDiv>
 
-      {/* PRIMARY ACTIONS */}
-      <MotionDiv
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid gap-4 lg:grid-cols-3"
-      >
+      {/* PRIMARY ACTIONS - CLICKABLE */}
+      <div className="grid gap-4 lg:grid-cols-3">
         {displayData.primaryActions.map((action, i) => (
           <MotionDiv
             key={i}
-            variants={itemVariants}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
             whileHover={{ y: -8, scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => handleActionClick(action)}
-            className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${action.color} p-8 text-white shadow-lg transition hover:shadow-2xl cursor-pointer`}
+            onClick={() => handleActionOpen(action)}
+            className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${action.color} p-8 text-white shadow-lg hover:shadow-2xl cursor-pointer transition`}
           >
-            <div className="absolute -right-16 -top-16 h-32 w-32 rounded-full bg-white opacity-10" />
+            <div className="absolute -right-16 -top-16 h-32 w-32 rounded-full bg-white opacity-10 group-hover:scale-150 transition-transform duration-300" />
             <div className="relative z-10">
-              <p className="text-4xl">{action.icon}</p>
-              <h3 className="mt-4 text-2xl font-black">{action.label}</h3>
+              <MotionDiv animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 3, repeat: Infinity }} className="text-4xl mb-2">
+                {action.icon}
+              </MotionDiv>
+              <h3 className="text-2xl font-black">{action.label}</h3>
               <p className="mt-2 text-sm opacity-90">{action.detail}</p>
-              <div className="mt-4 space-y-3">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleActionLaunch(action)
-                  }}
-                  disabled={actionLoading && selectedAction?.label === action.label}
-                  className="rounded-lg bg-white/20 px-4 py-2 text-sm font-semibold text-[var(--afrigo-text)] backdrop-blur transition hover:bg-white/30 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {actionLoading && selectedAction?.label === action.label ? 'Processing…' : 'Launch →'}
-                </button>
-                {selectedAction?.label === action.label && (
-                  <div className="rounded-2xl bg-white/15 p-3 text-xs text-[var(--afrigo-text-secondary)]">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span>{actionLoading ? `Running ${action.label}…` : actionCompleted ? 'Completed' : 'Ready to launch'}</span>
-                      <span>{actionProgress}%</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
-                      <div className="h-full rounded-full bg-white" style={{ width: `${actionProgress}%` }} />
-                    </div>
-                  </div>
-                )}
-              </div>
+              <MotionButton
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="mt-4 rounded-lg bg-white/20 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/30"
+              >
+                Launch →
+              </MotionButton>
             </div>
           </MotionDiv>
         ))}
-      </MotionDiv>
-      <MotionDiv
-        variants={itemVariants}
-        initial="hidden"
-        animate="visible"
-        className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 shadow-inner shadow-[rgba(0,0,0,0.03)]"
-      >
-        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Action preview</p>
-        <p className="mt-3 text-lg font-semibold text-[var(--afrigo-text)]">{actionFeedback}</p>
-      </MotionDiv>
+      </div>
 
-      {/* IMPORTANT KPIs */}
-      <MotionDiv variants={containerVariants} initial="hidden" animate="visible" className="grid gap-4 lg:grid-cols-4">
+      {/* KPIs - ANIMATED UPDATES */}
+      <div className="grid gap-4 lg:grid-cols-4">
         {kpiList.map((kpi, i) => (
           <MotionDiv
             key={i}
-            variants={itemVariants}
-            whileHover={{ y: -4 }}
-            className="rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-6 shadow-lg hover:shadow-xl transition"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.05 }}
+            whileHover={{ y: -4, scale: 1.02 }}
+            className="rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-6 shadow-lg hover:shadow-xl transition cursor-pointer"
           >
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-[var(--afrigo-text-secondary)]">{kpi.label}</p>
-                <p className="mt-3 text-3xl font-black text-[var(--afrigo-primary-green)]">{kpi.value}</p>
+                <MotionDiv initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }} className="mt-3 text-3xl font-black text-[var(--afrigo-primary-green)]">
+                  {kpi.value}
+                </MotionDiv>
               </div>
-              <p className="text-3xl">{kpi.icon}</p>
+              <MotionDiv animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity }} className="text-3xl">
+                {kpi.icon}
+              </MotionDiv>
             </div>
             <div className="mt-4 flex items-center gap-2">
               <span className={`text-sm font-semibold ${kpi.trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
                 {kpi.trend === 'up' ? '↑' : '↓'} {kpi.change}
               </span>
-              <span className="text-xs text-[var(--afrigo-text-secondary)]">vs last period</span>
             </div>
           </MotionDiv>
         ))}
-      </MotionDiv>
+      </div>
 
       {/* ACTIVE TASKS */}
-      <MotionDiv
-        variants={itemVariants}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.6 }}
-        className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl"
-      >
+      <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-black text-[var(--afrigo-primary-green)]">Active Tasks</h2>
-            <p className="mt-2 text-[var(--afrigo-text-secondary)]">Your immediate action items</p>
+            <p className="mt-2 text-[var(--afrigo-text-secondary)]">Immediate action items</p>
           </div>
-          <div className="rounded-full bg-[var(--afrigo-secondary-gold)] px-3 py-1 text-xs font-semibold text-white">
-            {taskList.length} tasks
-          </div>
+          <div className="rounded-full bg-[var(--afrigo-secondary-gold)] px-3 py-1 text-xs font-semibold text-white">{taskList.length} tasks</div>
         </div>
         <div className="space-y-4">
           {taskList.map((task, i) => (
             <MotionDiv
               key={i}
-              variants={itemVariants}
-              className="rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 hover:shadow-md transition"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              whileHover={{ x: 4 }}
+              className="rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 hover:shadow-md transition cursor-pointer"
+              onClick={() => setSelectedTaskIndex(selectedTaskIndex === i ? null : i)}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
-                    <p className="text-2xl">{task.icon}</p>
+                    <MotionDiv animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-2xl">
+                      {task.icon}
+                    </MotionDiv>
                     <div>
                       <h3 className="font-semibold text-[var(--afrigo-text)]">{task.label}</h3>
                       <p className="text-sm text-[var(--afrigo-text-secondary)]">{task.detail}</p>
                     </div>
                   </div>
                   <div className="mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-[var(--afrigo-text-secondary)]">
-                        {task.status} • {task.progress}%
-                      </span>
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[var(--afrigo-text-secondary)]">{task.status} • {task.progress}%</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--afrigo-border)]">
-                      <MotionDiv
-                        initial={{ width: 0 }}
-                        animate={{ width: `${task.progress}%` }}
-                        transition={{ duration: 0.8, ease: 'easeOut' }}
-                        className="h-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)]"
-                      />
+                      <MotionDiv initial={{ width: 0 }} animate={{ width: `${task.progress}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)]" />
                     </div>
                   </div>
                 </div>
-                <MotionButton
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleTaskView(i)}
-                  className="rounded-lg bg-[var(--afrigo-primary-green)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--afrigo-primary-green-hover)]"
-                >
-                  View
-                </MotionButton>
               </div>
+              {selectedTaskIndex === i && (
+                <MotionDiv initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-4 pt-4 border-t border-[var(--afrigo-border)]">
+                  <p className="text-sm text-[var(--afrigo-text-secondary)]">Full Details: {task.detail}</p>
+                  <p className="mt-2 text-xs text-[var(--afrigo-text-secondary)]">Current Status: {task.status}</p>
+                </MotionDiv>
+              )}
             </MotionDiv>
           ))}
         </div>
       </MotionDiv>
-      {selectedTaskIndex !== null && taskList[selectedTaskIndex] && (
-        <MotionDiv
-          variants={itemVariants}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 shadow-xl"
-        >
-          <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Task details</p>
-          <h3 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">{taskList[selectedTaskIndex].label}</h3>
-          <p className="mt-2 text-[var(--afrigo-text-secondary)]">{taskList[selectedTaskIndex].detail}</p>
-          <div className="mt-4 flex flex-wrap gap-3 text-sm text-[var(--afrigo-text-secondary)]">
-            <span className="rounded-full bg-[var(--afrigo-border)] px-3 py-1">Status: {taskList[selectedTaskIndex].status}</span>
-            <span className="rounded-full bg-[var(--afrigo-border)] px-3 py-1">Progress: {taskList[selectedTaskIndex].progress}%</span>
-          </div>
-        </MotionDiv>
-      )}
+
+      {/* SECONDARY TOOLS - INTERACTIVE PANELS */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {toolKeys.map((toolKey, i) => {
+          const toolData = toolsData[toolKey]
+          return (
+            <MotionDiv
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              whileHover={{ y: -4, scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setActiveToolKey(activeToolKey === toolKey ? null : toolKey)}
+              className={`group rounded-2xl border transition cursor-pointer shadow-lg hover:shadow-xl p-6 ${activeToolKey === toolKey ? 'border-[var(--afrigo-primary-green)] bg-[var(--afrigo-primary-green)]/5 ring-2 ring-[var(--afrigo-primary-green)]/20' : 'border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] hover:border-[var(--afrigo-primary-green)]'}`}
+            >
+              <MotionDiv animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2.5, repeat: Infinity }} className="text-4xl mb-3">
+                {toolData.icon}
+              </MotionDiv>
+              <h3 className="font-semibold text-[var(--afrigo-text)] group-hover:text-[var(--afrigo-primary-green)] transition">{toolKey}</h3>
+              <MotionButton
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="mt-4 rounded-lg bg-[var(--afrigo-bg)] px-3 py-2 text-xs font-semibold text-[var(--afrigo-primary-green)] group-hover:bg-[var(--afrigo-primary-green)] group-hover:text-white transition"
+              >
+                {activeToolKey === toolKey ? 'Close ✕' : 'Open →'}
+              </MotionButton>
+            </MotionDiv>
+          )
+        })}
+      </div>
+
+      {/* TOOL CONTENT PANEL - EXPANDABLE */}
+      <AnimatePresence>
+        {activeToolKey && (
+          <MotionDiv initial={{ opacity: 0, y: 20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: 20, height: 0 }} className="rounded-3xl border border-[var(--afrigo-primary-green)] bg-gradient-to-r from-[var(--afrigo-primary-green)]/5 to-[var(--afrigo-secondary-gold)]/5 p-8 shadow-lg">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Active Tool</p>
+                <h3 className="mt-2 text-2xl font-black text-[var(--afrigo-primary-green)]">{toolsData[activeToolKey]?.title}</h3>
+              </div>
+              <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveToolKey(null)} className="rounded-full bg-[var(--afrigo-primary-green)] p-2 text-white hover:opacity-90">
+                ✕
+              </MotionButton>
+            </div>
+            <div className="space-y-3">
+              {toolsData[activeToolKey]?.items.map((item, idx) => (
+                <MotionDiv
+                  key={idx}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  whileHover={{ x: 4 }}
+                  className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-4 hover:shadow-md transition"
+                >
+                  {item.label && (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-[var(--afrigo-text)]">{item.label}</p>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-[var(--afrigo-primary-green)]/20 text-[var(--afrigo-primary-green)]">{item.status || item.value || item.role}</span>
+                      </div>
+                      {item.details && <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">{item.details}</p>}
+                      {item.date && <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">{item.date}</p>}
+                      {item.issued && <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">{item.issued}</p>}
+                      {item.icon && <p className="mt-2 text-2xl">{item.icon}</p>}
+                    </>
+                  )}
+                  {item.metric && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-[var(--afrigo-text)]">{item.metric}</p>
+                      <p className="text-2xl font-black text-[var(--afrigo-primary-green)]">{item.value}</p>
+                    </div>
+                  )}
+                  {item.note && (
+                    <>
+                      <p className="text-xs font-semibold text-[var(--afrigo-secondary-gold)]">{item.author} • {item.date}</p>
+                      <p className="mt-2 text-sm text-[var(--afrigo-text)]">{item.note}</p>
+                    </>
+                  )}
+                  {item.name && (
+                    <div>
+                      <p className="font-semibold text-[var(--afrigo-text)]">{item.name}</p>
+                      <p className="text-xs text-[var(--afrigo-text-secondary)]">{item.role}</p>
+                      <p className="mt-2 text-xs text-green-500">• {item.status}</p>
+                      <MotionButton
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="mt-2 w-full rounded-lg bg-[var(--afrigo-primary-green)] py-1 text-xs font-semibold text-white hover:opacity-90"
+                      >
+                        Chat
+                      </MotionButton>
+                    </div>
+                  )}
+                </MotionDiv>
+              ))}
+            </div>
+          </MotionDiv>
+        )}
+      </AnimatePresence>
 
       {/* RECENT ACTIVITY */}
-      <MotionDiv
-        variants={itemVariants}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6, duration: 0.6 }}
-        className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl"
-      >
+      <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl">
         <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-[var(--afrigo-primary-green)]">Recent Activity</h2>
-            <p className="mt-2 text-[var(--afrigo-text-secondary)]">Live updates from your team</p>
-          </div>
-          <MotionButton
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={connectStream}
-            className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-2 text-sm font-semibold text-[var(--afrigo-text)] hover:border-[var(--afrigo-primary-green)]"
-          >
+          <h2 className="text-2xl font-black text-[var(--afrigo-primary-green)]">Recent Activity</h2>
+          <MotionButton whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={connectStream} className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-2 text-sm font-semibold hover:border-[var(--afrigo-primary-green)]">
             Refresh
           </MotionButton>
         </div>
         <div className="space-y-3">
           {updates.length === 0 ? (
             <div className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 text-center text-[var(--afrigo-text-secondary)]">
-              Waiting for team activity...
+              Waiting for activity...
             </div>
           ) : (
             updates.map((update, i) => (
@@ -717,56 +606,117 @@ export default function Dashboard() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4 }}
-                className="flex items-center justify-between rounded-xl bg-[var(--afrigo-bg)] p-4 hover:shadow-md transition"
+                className="flex items-center justify-between rounded-xl bg-[var(--afrigo-bg)] p-4 hover:shadow-md transition border border-[var(--afrigo-border)]/50 hover:border-[var(--afrigo-primary-green)]"
               >
                 <p className="text-sm text-[var(--afrigo-text)]">{update.message}</p>
-                <span className="text-xs text-[var(--afrigo-text-secondary)]">
-                  {new Date(update.ts).toLocaleTimeString()}
-                </span>
+                <span className="text-xs text-[var(--afrigo-text-secondary)]">{new Date(update.ts).toLocaleTimeString()}</span>
               </MotionDiv>
             ))
           )}
         </div>
       </MotionDiv>
 
-      {/* SECONDARY TOOLS */}
-      <MotionDiv
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid gap-4 lg:grid-cols-3"
-      >
-        {commonTools.map((tool, i) => (
-          <MotionDiv
-            key={i}
-            variants={itemVariants}
-            whileHover={{ y: -4, scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => handleToolOpen(i)}
-            className={`group rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-6 shadow-lg hover:shadow-xl hover:border-[var(--afrigo-primary-green)] transition cursor-pointer ${openToolIndex === i ? 'border-[var(--afrigo-primary-green)] bg-[var(--afrigo-bg)]' : ''}`}
-          >
-            <p className="text-3xl">{tool.icon}</p>
-            <h3 className="mt-3 font-semibold text-[var(--afrigo-text)] group-hover:text-[var(--afrigo-primary-green)] transition">
-              {tool.label}
-            </h3>
-            <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">{tool.detail}</p>
-            <button className="mt-4 rounded-lg bg-[var(--afrigo-bg)] px-3 py-2 text-xs font-semibold text-[var(--afrigo-primary-green)] group-hover:bg-[var(--afrigo-primary-green)] group-hover:text-white transition">
-              Open →
-            </button>
-          </MotionDiv>
-        ))}
-      </MotionDiv>
-      {openToolIndex !== null && (
-        <MotionDiv
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 shadow-inner shadow-[rgba(0,0,0,0.03)]"
-        >
-          <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Tool preview</p>
-          <h3 className="mt-2 text-lg font-semibold text-[var(--afrigo-text)]">{commonTools[openToolIndex].label}</h3>
-          <p className="mt-2 text-[var(--afrigo-text-secondary)]">{commonTools[openToolIndex].detail}. This is a live action placeholder so the dashboard feels active and clickable.</p>
-        </MotionDiv>
-      )}
+      {/* ACTION MODAL - FORM & PROCESSING */}
+      <AnimatePresence>
+        {activeActionModal && (
+          <>
+            <MotionDiv
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveActionModal(null)}
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            />
+            <MotionDiv
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', stiffness: 100 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-lg w-full">
+                {actionModalStep === 0 && (
+                  <>
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Execute Action</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">{activeActionModal.label}</h2>
+                      </div>
+                      <p className="text-4xl">{activeActionModal.icon}</p>
+                    </div>
+
+                    <p className="text-[var(--afrigo-text-secondary)]">{activeActionModal.detail}</p>
+
+                    <div className="mt-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Details</label>
+                        <MotionDiv whileFocus={{ scale: 1.02 }} className="relative">
+                          <input
+                            type="text"
+                            placeholder="Enter details..."
+                            onChange={(e) => setActionModalData({ ...actionModalData, details: e.target.value })}
+                            className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20 transition"
+                          />
+                        </MotionDiv>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Quantity / Amount</label>
+                        <MotionDiv whileFocus={{ scale: 1.02 }} className="relative">
+                          <input
+                            type="number"
+                            placeholder="0"
+                            onChange={(e) => setActionModalData({ ...actionModalData, quantity: e.target.value })}
+                            className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20 transition"
+                          />
+                        </MotionDiv>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex gap-3">
+                      <MotionButton
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setActiveActionModal(null)}
+                        className="flex-1 rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] py-3 font-semibold text-[var(--afrigo-text)] hover:border-[var(--afrigo-primary-green)] hover:text-[var(--afrigo-primary-green)] transition"
+                      >
+                        Cancel
+                      </MotionButton>
+                      <MotionButton
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleActionSubmit(activeActionModal)}
+                        className="flex-1 rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 font-semibold text-white hover:opacity-90 shadow-lg hover:shadow-xl transition"
+                      >
+                        Submit & Execute
+                      </MotionButton>
+                    </div>
+                  </>
+                )}
+
+                {actionModalStep === 1 && (
+                  <div className="text-center py-8">
+                    <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] flex items-center justify-center text-3xl">
+                      ⚙️
+                    </MotionDiv>
+                    <p className="font-semibold text-[var(--afrigo-text)] text-lg">Processing...</p>
+                    <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Executing {activeActionModal.label}</p>
+                    <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)]" />
+                  </div>
+                )}
+
+                {actionModalStep === 2 && (
+                  <div className="text-center py-8">
+                    <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">
+                      ✓
+                    </MotionDiv>
+                    <p className="font-semibold text-[var(--afrigo-text)] text-lg">Success!</p>
+                    <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">{getActionSuccessMessage(activeActionModal)}</p>
+                  </div>
+                )}
+              </div>
+            </MotionDiv>
+          </>
+        )}
+      </AnimatePresence>
     </MotionDiv>
   )
 }
