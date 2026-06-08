@@ -128,6 +128,13 @@ export default function Dashboard() {
   const [actionFeedback, setActionFeedback] = useState('Choose an action to explore your workflow.')
   const sourceRef = useRef<EventSource | null>(null)
 
+  const [kpiList, setKpiList] = useState<KPI[]>([])
+  const [taskList, setTaskList] = useState<DashboardTask[]>([])
+  const [activeActionPanel, setActiveActionPanel] = useState<PrimaryAction | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionCompleted, setActionCompleted] = useState(false)
+  const [actionProgress, setActionProgress] = useState(0)
+
   const addUpdate = (event: UpdateEvent) => {
     setUpdates((prev) => [event, ...prev].slice(0, 10))
   }
@@ -156,6 +163,197 @@ export default function Dashboard() {
     connectStream()
     return () => sourceRef.current?.close()
   }, [])
+
+  const handleActionClick = (action: PrimaryAction) => {
+    setSelectedAction(action)
+    setActiveActionPanel(action)
+    const roleText = displayRole ? ` (${displayRole})` : ''
+    setActionFeedback(`Ready to ${action.label.toLowerCase()}${roleText} — ${action.detail}. Click "Launch →" to execute.`)
+    tracker.log('action_click', action.label, action.detail, { role: displayRole, color: action.color })
+  }
+
+  const handleActionLaunch = (action: PrimaryAction) => {
+    if (actionLoading) return
+    setActionLoading(true)
+    setActionCompleted(false)
+    setActionProgress(0)
+    setActionFeedback(`Initializing ${action.label}…`)
+    tracker.log('button_click', `Launch ${action.label}`, action.detail, { displayRole })
+
+    let step = 0
+    const intervalId = window.setInterval(() => {
+      step += 1
+      setActionProgress(step * 20)
+      
+      // Progressive feedback messages during execution
+      if (step === 1) setActionFeedback(`Validating ${action.label} parameters…`)
+      else if (step === 2) setActionFeedback(`Processing with suppliers and partners…`)
+      else if (step === 3) setActionFeedback(`Updating inventory and compliance data…`)
+      else if (step === 4) setActionFeedback(`Recording transaction and archiving…`)
+      else if (step >= 5) {
+        window.clearInterval(intervalId)
+        setActionLoading(false)
+        setActionCompleted(true)
+        const successMsg = getActionSuccessMessage(action, displayRole)
+        setActionFeedback(successMsg)
+        addUpdate({ message: `${action.label} completed by ${displayName}.`, ts: Date.now(), status: 'success' })
+        applyActionResults(action, displayRole)
+      }
+    }, 180)
+  }
+
+  const getActionSuccessMessage = (action: PrimaryAction, role: Role | null): string => {
+    const lower = action.label.toLowerCase()
+    if (role === 'Buyer') {
+      if (lower.includes('rfq')) return `RFQ created and sent to ${Math.floor(Math.random() * 15) + 5} qualified suppliers. Awaiting bids.`
+      if (lower.includes('bid')) return `Comparison analysis complete: ${Math.floor(Math.random() * 5) + 3} suppliers submitted competitive bids. Reviews updated.`
+      if (lower.includes('shipment')) return `Shipment tracked: ETA confirmed ${Math.floor(Math.random() * 7) + 1} days from now. Customs pre-clearance filed.`
+    } else if (role === 'Seller') {
+      if (lower.includes('quote')) return `Commercial quote submitted to ${Math.floor(Math.random() * 8) + 2} buyer accounts. Awaiting responses.`
+      if (lower.includes('inventory')) return `Stock levels updated across 3 warehouses. ${Math.floor(Math.random() * 500) + 100} units confirmed available.`
+      if (lower.includes('analytics')) return `Sales analytics refreshed. Month-to-date revenue trending +${Math.floor(Math.random() * 25) + 10}% vs last period.`
+    } else if (role === 'Exporter') {
+      if (lower.includes('docs')) return `Export documentation filed with port authority. Filing reference: EXP-${Date.now().toString().slice(-6)}. Status: Pending review.`
+      if (lower.includes('pickup')) return `Logistics carrier confirmed. Pickup scheduled for ${['tomorrow', 'in 2 days', 'Friday'][Math.floor(Math.random() * 3)]}. 3 containers allocated.`
+      if (lower.includes('compliance')) return `Regulatory compliance check passed. All certifications current. Clearance probability: ${95 + Math.floor(Math.random() * 5)}%.`
+    }
+    return `${action.label} executed successfully. Workflow updated.`
+  }
+
+  const applyActionResults = (action: PrimaryAction, role: Role | null) => {
+    const lower = action.label.toLowerCase()
+    
+    // BUYER role actions
+    if (role === 'Buyer') {
+      if (lower.includes('rfq')) {
+        // Create RFQ affects bid review task and increases live RFQs KPI
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('bid')) {
+            return { ...task, status: 'In progress', progress: Math.min(100, task.progress + 40) }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Live RFQs')) {
+            const newVal = typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value
+            return { ...kpi, value: newVal, change: '+1', trend: 'up' }
+          }
+          return kpi
+        }))
+      } else if (lower.includes('compare')) {
+        // Compare bids completes the bid review task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('bid')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+      } else if (lower.includes('track')) {
+        // Track shipment completes shipping confirmation task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('shipping')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Avg Response')) {
+            return { ...kpi, change: '-5%', trend: 'up' }
+          }
+          return kpi
+        }))
+      }
+    }
+    // SELLER role actions
+    else if (role === 'Seller') {
+      if (lower.includes('quote')) {
+        // Submit quote completes the respond to RFQs task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('Respond')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Active Quotes')) {
+            const newVal = typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value
+            return { ...kpi, value: newVal, change: '+1', trend: 'up' }
+          }
+          return kpi
+        }))
+      } else if (lower.includes('inventory')) {
+        // Manage inventory updates the warehouse availability task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('warehouse')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Inventory')) {
+            return { ...kpi, change: 'Updated', trend: 'neutral' }
+          }
+          return kpi
+        }))
+      } else if (lower.includes('analytics')) {
+        // View analytics increases revenue KPI
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Revenue')) {
+            return { ...kpi, change: '+15%', trend: 'up' }
+          }
+          return kpi
+        }))
+      }
+    }
+    // EXPORTER role actions
+    else if (role === 'Exporter') {
+      if (lower.includes('file') || lower.includes('docs')) {
+        // File export docs completes customs filing task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('customs')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Docs Pending')) {
+            const newVal = typeof kpi.value === 'number' ? Math.max(0, kpi.value - 1) : kpi.value
+            return { ...kpi, value: newVal, change: '-1', trend: 'up' }
+          }
+          return kpi
+        }))
+      } else if (lower.includes('pickup') || lower.includes('schedule')) {
+        // Schedule pickup completes carrier booking task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('booking')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Shipments Active')) {
+            const newVal = typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value
+            return { ...kpi, value: newVal, change: '+1', trend: 'up' }
+          }
+          return kpi
+        }))
+      } else if (lower.includes('monitor') || lower.includes('compliance')) {
+        // Monitor compliance completes export manifests task
+        setTaskList((prev) => prev.map((task) => {
+          if (task.label.includes('manifests')) {
+            return { ...task, status: 'Complete', progress: 100 }
+          }
+          return task
+        }))
+        setKpiList((prev) => prev.map((kpi) => {
+          if (kpi.label.includes('Compliance Rate')) {
+            return { ...kpi, change: '+0.5%', trend: 'up' }
+          }
+          return kpi
+        }))
+      }
+    }
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -217,15 +415,22 @@ export default function Dashboard() {
       : null
   const displayData = displayRole ? dashboardsByRole[displayRole] : null
 
-  const handleActionClick = (action: PrimaryAction) => {
-    setSelectedAction(action)
-    setActionFeedback(`Opening ${action.label} — ${action.detail}`)
-    tracker.log('action_click', action.label, action.detail, { color: action.color })
-  }
+  useEffect(() => {
+    if (!displayData) return
+    setTaskList(displayData.tasks)
+    setKpiList(displayData.kpis)
+    setSelectedTaskIndex(null)
+    setOpenToolIndex(null)
+    setSelectedAction(null)
+    setActiveActionPanel(null)
+    setActionCompleted(false)
+    setActionProgress(0)
+    setActionFeedback('Choose an action to explore your workflow.')
+  }, [displayData])
 
   const handleTaskView = (index: number) => {
     setSelectedTaskIndex(index)
-    const task = displayData?.tasks[index]
+    const task = taskList[index]
     if (task) {
       setActionFeedback(`Viewing task: ${task.label}`)
       tracker.log('task_view', task.label, task.detail, { status: task.status, progress: task.progress })
@@ -335,9 +540,30 @@ export default function Dashboard() {
               <p className="text-4xl">{action.icon}</p>
               <h3 className="mt-4 text-2xl font-black">{action.label}</h3>
               <p className="mt-2 text-sm opacity-90">{action.detail}</p>
-              <button className="mt-4 rounded-lg bg-white/20 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/30">
-                Launch →
-              </button>
+              <div className="mt-4 space-y-3">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleActionLaunch(action)
+                  }}
+                  disabled={actionLoading && selectedAction?.label === action.label}
+                  className="rounded-lg bg-white/20 px-4 py-2 text-sm font-semibold text-[var(--afrigo-text)] backdrop-blur transition hover:bg-white/30 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {actionLoading && selectedAction?.label === action.label ? 'Processing…' : 'Launch →'}
+                </button>
+                {selectedAction?.label === action.label && (
+                  <div className="rounded-2xl bg-white/15 p-3 text-xs text-[var(--afrigo-text-secondary)]">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span>{actionLoading ? `Running ${action.label}…` : actionCompleted ? 'Completed' : 'Ready to launch'}</span>
+                      <span>{actionProgress}%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                      <div className="h-full rounded-full bg-white" style={{ width: `${actionProgress}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </MotionDiv>
         ))}
@@ -354,7 +580,7 @@ export default function Dashboard() {
 
       {/* IMPORTANT KPIs */}
       <MotionDiv variants={containerVariants} initial="hidden" animate="visible" className="grid gap-4 lg:grid-cols-4">
-        {displayData.kpis.map((kpi, i) => (
+        {kpiList.map((kpi, i) => (
           <MotionDiv
             key={i}
             variants={itemVariants}
@@ -392,11 +618,11 @@ export default function Dashboard() {
             <p className="mt-2 text-[var(--afrigo-text-secondary)]">Your immediate action items</p>
           </div>
           <div className="rounded-full bg-[var(--afrigo-secondary-gold)] px-3 py-1 text-xs font-semibold text-white">
-            {displayData.tasks.length} tasks
+            {taskList.length} tasks
           </div>
         </div>
         <div className="space-y-4">
-          {displayData.tasks.map((task, i) => (
+          {taskList.map((task, i) => (
             <MotionDiv
               key={i}
               variants={itemVariants}
@@ -440,7 +666,7 @@ export default function Dashboard() {
           ))}
         </div>
       </MotionDiv>
-      {selectedTaskIndex !== null && displayData.tasks[selectedTaskIndex] && (
+      {selectedTaskIndex !== null && taskList[selectedTaskIndex] && (
         <MotionDiv
           variants={itemVariants}
           initial={{ opacity: 0, y: 20 }}
@@ -448,11 +674,11 @@ export default function Dashboard() {
           className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 shadow-xl"
         >
           <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Task details</p>
-          <h3 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">{displayData.tasks[selectedTaskIndex].label}</h3>
-          <p className="mt-2 text-[var(--afrigo-text-secondary)]">{displayData.tasks[selectedTaskIndex].detail}</p>
+          <h3 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">{taskList[selectedTaskIndex].label}</h3>
+          <p className="mt-2 text-[var(--afrigo-text-secondary)]">{taskList[selectedTaskIndex].detail}</p>
           <div className="mt-4 flex flex-wrap gap-3 text-sm text-[var(--afrigo-text-secondary)]">
-            <span className="rounded-full bg-[var(--afrigo-border)] px-3 py-1">Status: {displayData.tasks[selectedTaskIndex].status}</span>
-            <span className="rounded-full bg-[var(--afrigo-border)] px-3 py-1">Progress: {displayData.tasks[selectedTaskIndex].progress}%</span>
+            <span className="rounded-full bg-[var(--afrigo-border)] px-3 py-1">Status: {taskList[selectedTaskIndex].status}</span>
+            <span className="rounded-full bg-[var(--afrigo-border)] px-3 py-1">Progress: {taskList[selectedTaskIndex].progress}%</span>
           </div>
         </MotionDiv>
       )}
