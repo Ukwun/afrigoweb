@@ -11,240 +11,282 @@ import { useActivityTracker } from '@/lib/activityTracker'
 const MotionDiv = motion.div as any
 const MotionButton = motion.button as any
 
-type UpdateEvent = {
-  message: string
-  ts: number
-  status?: string
-}
+type UpdateEvent = { message: string; ts: number; status?: string }
 
-type DashboardTask = {
-  label: string
-  detail: string
-  status: 'Pending' | 'In progress' | 'Complete'
-  progress: number
-  icon: string
-}
+// ============================================================================
+// BUYER DASHBOARD TYPES & DATA
+// ============================================================================
 
-type KPI = {
-  label: string
-  value: string | number
-  change: string
-  trend: 'up' | 'down' | 'neutral'
-  icon: string
-}
-
-type PrimaryAction = {
-  label: string
-  detail: string
-  icon: string
-  color: string
-}
-
-type IncomingItem = {
+type BuyerRFQ = {
   id: string
-  from: string
-  type: string
-  message: string
-  time: number
-  status: 'new' | 'read'
+  title: string
+  quantity: number
+  unit: string
+  destination: string
+  deadline: string
+  budget: string
+  status: 'Draft' | 'Open' | 'Bid Received' | 'Awarded'
+  bidCount: number
 }
 
-type RoleConfig = {
-  hero: string
-  subtitle: string
-  primaryActions: PrimaryAction[]
-  kpis: KPI[]
-  tasks: DashboardTask[]
-  incomingLabel: string
-  incomingExample: IncomingItem[]
-  crossRoleSection: string
-  tools: string[]
+type BuyerBid = {
+  id: string
+  supplierId: string
+  supplierName: string
+  rating: number
+  price: number
+  delivery: string
+  terms: string
 }
 
-// BUYER ROLE CONFIG
-const BuyerConfig: RoleConfig = {
+type BuyerShipment = {
+  id: string
+  status: 'Processing' | 'In Transit' | 'Customs Clearance' | 'Delivered'
+  carrier: string
+  eta: string
+  location: string
+  progress: number
+}
+
+// ============================================================================
+// SELLER DASHBOARD TYPES & DATA
+// ============================================================================
+
+type SellerLot = {
+  id: string
+  product: string
+  quantity: number
+  unit: string
+  grade: string
+  price: number
+  origin: string
+  inStock: boolean
+  photo?: string
+}
+
+type SellerRFQRequest = {
+  id: string
+  buyerId: string
+  buyerName: string
+  product: string
+  quantity: number
+  deadline: string
+  status: 'New' | 'Quoted' | 'Won' | 'Lost'
+}
+
+type SellerAnalytics = {
+  totalBids: number
+  winRate: number
+  revenueThisMonth: number
+  topCustomer: string
+  responseTime: number
+}
+
+// ============================================================================
+// EXPORTER DASHBOARD TYPES & DATA
+// ============================================================================
+
+type ExportDoc = {
+  id: string
+  type: 'COO' | 'Invoice' | 'Packing List' | 'BoL' | 'Customs'
+  status: 'Draft' | 'Submitted' | 'Approved' | 'Rejected'
+  shipmentId: string
+  uploadedAt?: string
+}
+
+type ExportPickup = {
+  id: string
+  warehouseLocation: string
+  containerCount: number
+  estimatedWeight: string
+  preferredDate: string
+  carrier?: string
+  status: 'Scheduled' | 'Confirmed' | 'In Transit' | 'Delivered'
+}
+
+type ComplianceItem = {
+  id: string
+  category: string
+  requirement: string
+  status: 'Pending' | 'Completed' | 'Verified'
+  dueDate: string
+}
+
+// ============================================================================
+// ROLE-SPECIFIC CONFIGS
+// ============================================================================
+
+const BuyerConfig = {
   hero: 'Buyer Dashboard',
-  subtitle: 'Source products • Compare suppliers • Manage purchases',
-  primaryActions: [
-    { label: 'Create RFQ', detail: 'Send request for quotation to suppliers', icon: '📝', color: 'from-blue-500 to-blue-600' },
-    { label: 'Compare Bids', detail: 'Review proposals from multiple sellers', icon: '⚖️', color: 'from-purple-500 to-purple-600' },
-    { label: 'Track Shipment', detail: 'Monitor order delivery with exporter', icon: '🚚', color: 'from-green-500 to-green-600' }
-  ],
-  kpis: [
-    { label: 'Active RFQs', value: 24, change: '+12%', trend: 'up', icon: '📊' },
-    { label: 'Avg Response', value: '2.4h', change: '-15%', trend: 'up', icon: '⏱️' },
-    { label: 'Suppliers', value: 47, change: '+8', trend: 'up', icon: '👥' },
-    { label: 'Approval Rate', value: '94%', change: '+3%', trend: 'up', icon: '✅' }
-  ],
-  tasks: [
-    { label: 'Review quotes from 8 suppliers', detail: 'Evaluate pricing and delivery terms', status: 'Pending', progress: 35, icon: '🔍' },
-    { label: 'Approve purchase order', detail: 'PO #2847 ready for release', status: 'Pending', progress: 60, icon: '🧾' },
-    { label: 'Confirm shipping details', detail: 'ETA and customs documents needed', status: 'In progress', progress: 80, icon: '📦' }
-  ],
-  incomingLabel: 'Incoming Quotes from Sellers',
-  incomingExample: [
-    { id: '1', from: 'TechCorp Supplies', type: 'Quote Response', message: 'Quote for 1000 units at $45/unit', time: Date.now() - 300000, status: 'new' },
-    { id: '2', from: 'Global Traders', type: 'Quote Response', message: 'Expedited option available +15% cost', time: Date.now() - 600000, status: 'new' }
-  ],
-  crossRoleSection: 'Exporters Ready to Ship',
-  tools: ['View Compliance Docs', 'Check Payment Status', 'Review Shipment Timeline', 'Open Account Notes', 'Message Support Team', 'Export Report']
+  subtitle: 'Source products • Request quotes • Manage purchases from global suppliers',
+  actions: [
+    {
+      id: 'create-rfq',
+      label: 'Create RFQ',
+      detail: 'Post a new request for quotation to find suppliers',
+      icon: '📋',
+      color: 'from-blue-500 to-blue-600'
+    },
+    {
+      id: 'compare-bids',
+      label: 'Compare Bids',
+      detail: 'Review and compare proposals from multiple suppliers',
+      icon: '⚖️',
+      color: 'from-purple-500 to-purple-600'
+    },
+    {
+      id: 'track-shipment',
+      label: 'Track Shipment',
+      detail: 'Monitor your orders from warehouse to destination',
+      icon: '🚢',
+      color: 'from-green-500 to-green-600'
+    }
+  ]
 }
 
-// SELLER ROLE CONFIG
-const SellerConfig: RoleConfig = {
+const SellerConfig = {
   hero: 'Seller Dashboard',
-  subtitle: 'Respond to buyers • Manage inventory • Grow sales',
-  primaryActions: [
-    { label: 'Respond to RFQ', detail: 'Submit competitive quote to buyer', icon: '✉️', color: 'from-emerald-500 to-emerald-600' },
-    { label: 'Manage Inventory', detail: 'Update available stock levels', icon: '📦', color: 'from-orange-500 to-orange-600' },
-    { label: 'View Analytics', detail: 'Track sales performance metrics', icon: '📈', color: 'from-cyan-500 to-cyan-600' }
-  ],
-  kpis: [
-    { label: 'Pending RFQs', value: 12, change: '+3', trend: 'up', icon: '💬' },
-    { label: 'Win Rate', value: '67%', change: '+8%', trend: 'up', icon: '🎯' },
-    { label: 'Stock', value: '2.4K units', change: '-120', trend: 'down', icon: '📦' },
-    { label: 'This Month', value: '$124K', change: '+22%', trend: 'up', icon: '💰' }
-  ],
-  tasks: [
-    { label: 'Respond to 5 active RFQs', detail: 'Prepare competitive quotes for buyers', status: 'Pending', progress: 40, icon: '💭' },
-    { label: 'Upload certifications', detail: 'Quality and origin certificates needed', status: 'Pending', progress: 25, icon: '🏅' },
-    { label: 'Confirm warehouse stock', detail: 'Verify availability for 3 pending orders', status: 'In progress', progress: 75, icon: '🏭' }
-  ],
-  incomingLabel: 'New RFQs from Buyers',
-  incomingExample: [
-    { id: '1', from: 'RetailCo', type: 'RFQ', message: 'Need 2000 units of Product X', time: Date.now() - 120000, status: 'new' },
-    { id: '2', from: 'Electronics Plus', type: 'RFQ', message: 'Bulk order: 5000 units, need samples first', time: Date.now() - 420000, status: 'new' }
-  ],
-  crossRoleSection: 'Exporters Available for Fulfillment',
-  tools: ['View Compliance Docs', 'Check Payment Status', 'Review Shipment Timeline', 'Open Account Notes', 'Message Support Team', 'Export Report']
+  subtitle: 'Manage inventory • Respond to buyers • Grow your sales',
+  actions: [
+    {
+      id: 'respond-rfq',
+      label: 'Respond to RFQ',
+      detail: 'Browse buyer requests and submit competitive quotes',
+      icon: '✉️',
+      color: 'from-emerald-500 to-emerald-600'
+    },
+    {
+      id: 'manage-inventory',
+      label: 'Manage Inventory',
+      detail: 'Add, update, and organize your product lots',
+      icon: '📦',
+      color: 'from-orange-500 to-orange-600'
+    },
+    {
+      id: 'view-analytics',
+      label: 'View Analytics',
+      detail: 'Track performance metrics and win rates',
+      icon: '📊',
+      color: 'from-cyan-500 to-cyan-600'
+    }
+  ]
 }
 
-// EXPORTER ROLE CONFIG
-const ExporterConfig: RoleConfig = {
+const ExporterConfig = {
   hero: 'Exporter Command Center',
-  subtitle: 'Handle logistics • Clear customs • Deliver worldwide',
-  primaryActions: [
-    { label: 'File Export Docs', detail: 'Submit customs documentation', icon: '📄', color: 'from-rose-500 to-rose-600' },
-    { label: 'Schedule Pickup', detail: 'Arrange logistics and transport', icon: '🛳️', color: 'from-indigo-500 to-indigo-600' },
-    { label: 'Monitor Compliance', detail: 'Track regulatory compliance status', icon: '✅', color: 'from-teal-500 to-teal-600' }
-  ],
-  kpis: [
-    { label: 'Active Shipments', value: 8, change: '+2', trend: 'up', icon: '🚢' },
-    { label: 'Compliance Rate', value: '99.2%', change: '+0.8%', trend: 'up', icon: '🔒' },
-    { label: 'Avg Clearance', value: '3.2 days', change: '-0.8', trend: 'up', icon: '⏰' },
-    { label: 'Pending Docs', value: 4, change: '-1', trend: 'up', icon: '📋' }
-  ],
-  tasks: [
-    { label: 'Finalize export manifests', detail: 'Complete 2 pending shipment documents', status: 'Pending', progress: 45, icon: '📝' },
-    { label: 'Submit customs filings', detail: 'Port authority clearance required', status: 'Pending', progress: 20, icon: '🏛️' },
-    { label: 'Confirm carrier booking', detail: 'Lock 3 containers for pickup', status: 'In progress', progress: 90, icon: '📞' }
-  ],
-  incomingLabel: 'Incoming Orders from Buyers & Sellers',
-  incomingExample: [
-    { id: '1', from: 'RetailCo ← TechCorp Supplies', type: 'Shipment', message: '2000 units ready for export', time: Date.now() - 180000, status: 'new' },
-    { id: '2', from: 'Electronics Plus ← Global Traders', type: 'Shipment', message: '5000 units + samples, urgent delivery', time: Date.now() - 540000, status: 'new' }
-  ],
-  crossRoleSection: 'Connected Buyers & Sellers',
-  tools: ['View Compliance Docs', 'Check Payment Status', 'Review Shipment Timeline', 'Open Account Notes', 'Message Support Team', 'Export Report']
+  subtitle: 'Manage logistics • Clear customs • Ensure compliance',
+  actions: [
+    {
+      id: 'file-export-docs',
+      label: 'File Export Docs',
+      detail: 'Upload and manage customs documentation',
+      icon: '📄',
+      color: 'from-rose-500 to-rose-600'
+    },
+    {
+      id: 'schedule-pickup',
+      label: 'Schedule Pickup',
+      detail: 'Book logistics and coordinate warehouse pickups',
+      icon: '🛳️',
+      color: 'from-indigo-500 to-indigo-600'
+    },
+    {
+      id: 'monitor-compliance',
+      label: 'Monitor Compliance',
+      detail: 'Track regulatory requirements and certifications',
+      icon: '✅',
+      color: 'from-teal-500 to-teal-600'
+    }
+  ]
 }
 
-// Map roles to configs
-const roleConfigs: Record<Role, RoleConfig> = {
+const RoleConfigs = {
   'Buyer': BuyerConfig,
   'Seller': SellerConfig,
   'Exporter': ExporterConfig
 }
 
-const toolsData: Record<string, { title: string; icon: string; items: any[] }> = {
-  'View Compliance Docs': {
-    title: 'Compliance Documents',
-    icon: '🧾',
-    items: [
-      { label: 'Certificate of Origin', status: 'Valid', issued: '2024-06-01', details: 'Issued by Chamber of Commerce' },
-      { label: 'Quality Certification', status: 'Valid', issued: 'ISO 9001:2015', details: 'Expires 2025-12-31' },
-      { label: 'Factory Audit Report', status: 'Current', issued: '2024-05-15', details: 'Last inspection passed' }
-    ]
-  },
-  'Check Payment Status': {
-    title: 'Payment Milestones',
-    icon: '💰',
-    items: [
-      { label: 'Deposit (30%)', status: '✓ Paid', value: '$15,000', date: '2024-05-20' },
-      { label: 'Production (50%)', status: '⏳ Due', value: '$25,000', date: '2024-06-15' },
-      { label: 'Final (20%)', status: '⊘ Pending', value: '$10,000', date: 'On shipment' }
-    ]
-  },
-  'Review Shipment Timeline': {
-    title: 'Shipment Tracking',
-    icon: '⏱️',
-    items: [
-      { label: 'Order Confirmed', status: 'Complete', date: 'May 20, 2024', icon: '✓' },
-      { label: 'In Production', status: 'In Progress', date: 'Est. June 10', icon: '⚙' },
-      { label: 'Shipped', status: 'Pending', date: 'Est. June 15', icon: '📦' }
-    ]
-  },
-  'Open Account Notes': {
-    title: 'Account Notes',
-    icon: '🗒️',
-    items: [
-      { author: 'Account Manager', date: 'Jun 7, 2024', note: 'Expedited shipment approved. $500 surcharge.' },
-      { author: 'Quality Team', date: 'Jun 5, 2024', note: 'Final QC passed. All units meet specs.' },
-      { author: 'Logistics', date: 'May 28, 2024', note: 'Special packaging for fragile items confirmed.' }
-    ]
-  },
-  'Message Support Team': {
-    title: 'Support Contacts',
-    icon: '💬',
-    items: [
-      { name: 'Sarah Chen', role: 'Account Manager', status: 'Available now', response: '2min' },
-      { name: 'James Wilson', role: 'Logistics Specialist', status: 'Back in 30min', response: '5min' },
-      { name: 'Maria Garcia', role: 'Customer Success', status: 'Available', response: '3min' }
-    ]
-  },
-  'Export Report': {
-    title: 'Activity Report',
-    icon: '📊',
-    items: [
-      { metric: 'Total Orders', value: '12', period: 'May 2024' },
-      { metric: 'Total Value', value: '$450,000', period: 'May 2024' },
-      { metric: 'Avg Response Time', value: '2.1h', period: 'May 2024' }
-    ]
-  }
-}
-
 export default function Dashboard() {
   const { user, isSignedIn, isDemo } = useAuth()
   const tracker = useActivityTracker()
+  const [mounted, setMounted] = useState(false)
+  const [displayName, setDisplayName] = useState('Guest')
+  const [demoRole, setDemoRole] = useState<Role | null>(null)
   const [updates, setUpdates] = useState<UpdateEvent[]>([])
   const [statusMessage, setStatusMessage] = useState('Live')
-  const [mounted, setMounted] = useState(false)
-  const [demoRole, setDemoRole] = useState<Role | null>(null)
-  const [displayName, setDisplayName] = useState('Guest')
-  const [kpiList, setKpiList] = useState<KPI[]>([])
-  const [taskList, setTaskList] = useState<DashboardTask[]>([])
-  const [incomingItems, setIncomingItems] = useState<IncomingItem[]>([])
-  const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(null)
-  const [activeToolKey, setActiveToolKey] = useState<string | null>(null)
-  const [activeActionModal, setActiveActionModal] = useState<PrimaryAction | null>(null)
-  const [actionModalStep, setActionModalStep] = useState(0)
-  const [actionModalData, setActionModalData] = useState<Record<string, string>>({})
-  const [incomingPanelOpen, setIncomingPanelOpen] = useState(false)
+  const [activeActionId, setActiveActionId] = useState<string | null>(null)
+  const [activeStep, setActiveStep] = useState(0)
   const sourceRef = useRef<EventSource | null>(null)
 
-  const addUpdate = (event: UpdateEvent) => {
-    setUpdates((prev) => [event, ...prev].slice(0, 10))
+  // Buyer State
+  const [buyerRFQs, setBuyerRFQs] = useState<BuyerRFQ[]>([
+    { id: '1', title: 'Coffee Beans - Arabica', quantity: 5000, unit: 'kg', destination: 'Germany', deadline: '2026-07-15', budget: '$25,000-$30,000', status: 'Bid Received', bidCount: 8 },
+    { id: '2', title: 'Cocoa Butter - Premium Grade', quantity: 2000, unit: 'kg', destination: 'Belgium', deadline: '2026-07-30', budget: '$18,000-$22,000', status: 'Open', bidCount: 3 }
+  ])
+  const [buyerBids, setBuyerBids] = useState<BuyerBid[]>([
+    { id: '1', supplierId: 's1', supplierName: 'Premium Coffee Co', rating: 4.8, price: 28, delivery: '15 days', terms: 'PayPal, 30% upfront' },
+    { id: '2', supplierId: 's2', supplierName: 'African Traders Inc', rating: 4.5, price: 26, delivery: '18 days', terms: 'Bank transfer, 50% upfront' },
+    { id: '3', supplierId: 's3', supplierName: 'Global Export Ltd', rating: 4.9, price: 29, delivery: '12 days', terms: 'Escrow, 20% upfront' }
+  ])
+  const [buyerShipments, setBuyerShipments] = useState<BuyerShipment[]>([
+    { id: '1', status: 'In Transit', carrier: 'DHL Global', eta: 'June 15, 2026', location: 'En route to Germany', progress: 65 },
+    { id: '2', status: 'Customs Clearance', carrier: 'FedEx', eta: 'June 18, 2026', location: 'Port of Hamburg', progress: 45 }
+  ])
+  const [buyerCreateRFQForm, setBuyerCreateRFQForm] = useState({ product: '', quantity: '', destination: '', budget: '', deadline: '' })
+  const [buyerSelectedBid, setBuyerSelectedBid] = useState<BuyerBid | null>(null)
+
+  // Seller State
+  const [sellerLots, setSellerLots] = useState<SellerLot[]>([
+    { id: '1', product: 'Premium Robusta Coffee', quantity: 8000, unit: 'kg', grade: 'Grade A', price: 28, origin: 'Uganda', inStock: true },
+    { id: '2', product: 'Organic Cocoa Butter', quantity: 3000, unit: 'kg', grade: 'Organic Certified', price: 19, origin: 'Ghana', inStock: true },
+    { id: '3', product: 'Shea Butter', quantity: 5000, unit: 'kg', grade: 'Pure Grade', price: 12, origin: 'Burkina Faso', inStock: false }
+  ])
+  const [sellerRFQs, setSellerRFQs] = useState<SellerRFQRequest[]>([
+    { id: '1', buyerId: 'b1', buyerName: 'German Imports GmbH', product: 'Coffee Beans', quantity: 5000, deadline: '2026-07-15', status: 'New' },
+    { id: '2', buyerId: 'b2', buyerName: 'Belgian Trade Co', product: 'Cocoa Butter', quantity: 2000, deadline: '2026-07-30', status: 'New' }
+  ])
+  const [sellerAnalytics] = useState<SellerAnalytics>({
+    totalBids: 24,
+    winRate: 62,
+    revenueThisMonth: 125000,
+    topCustomer: 'German Imports GmbH',
+    responseTime: 2
+  })
+  const [sellerCreateLotForm, setSellerCreateLotForm] = useState({ product: '', quantity: '', grade: '', price: '', origin: '' })
+  const [sellerQuoteForm, setSellerQuoteForm] = useState({ rfqId: '', price: '', delivery: '', terms: '' })
+  const [sellerSelectedRFQ, setSellerSelectedRFQ] = useState<SellerRFQRequest | null>(null)
+
+  // Exporter State
+  const [exporterDocs, setExporterDocs] = useState<ExportDoc[]>([
+    { id: '1', type: 'Invoice', status: 'Draft', shipmentId: 'SHP001', uploadedAt: undefined },
+    { id: '2', type: 'COO', status: 'Submitted', shipmentId: 'SHP001', uploadedAt: '2026-06-07' },
+    { id: '3', type: 'Packing List', status: 'Approved', shipmentId: 'SHP001', uploadedAt: '2026-06-06' }
+  ])
+  const [exporterPickups, setExporterPickups] = useState<ExportPickup[]>([
+    { id: '1', warehouseLocation: 'Kampala Central Hub', containerCount: 2, estimatedWeight: '5,000 kg', preferredDate: '2026-06-12', carrier: 'DHL Global', status: 'Confirmed' },
+    { id: '2', warehouseLocation: 'Accra Port Warehouse', containerCount: 1, estimatedWeight: '2,000 kg', preferredDate: '2026-06-15', status: 'Scheduled' }
+  ])
+  const [exporterCompliance, setExporterCompliance] = useState<ComplianceItem[]>([
+    { id: '1', category: 'Product Certification', requirement: 'ISO 9001', status: 'Completed', dueDate: '2026-06-30' },
+    { id: '2', category: 'Customs', requirement: 'HS Code Declaration', status: 'Pending', dueDate: '2026-06-10' },
+    { id: '3', category: 'Origin', requirement: 'Certificate of Origin', status: 'Verified', dueDate: '2026-06-30' }
+  ])
+  const [exporterDocForm, setExporterDocForm] = useState({ docType: 'Invoice', file: '', shipmentId: '' })
+  const [exporterPickupForm, setExporterPickupForm] = useState({ warehouse: '', containers: '', weight: '', date: '', carrier: '' })
+
+  const addUpdate = (message: string) => {
+    setUpdates(prev => [{ message, ts: Date.now() }, ...prev].slice(0, 10))
   }
 
   const connectStream = () => {
     if (sourceRef.current) sourceRef.current.close()
     const source = new EventSource('/api/dashboard/stream')
     sourceRef.current = source
-
     source.onopen = () => setStatusMessage('Live')
     source.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
-        addUpdate({ ...data, ts: data.ts || Date.now() })
+        addUpdate(data.message || 'New activity')
       } catch (err) {
         console.error('Failed to parse event', err)
       }
@@ -268,255 +310,161 @@ export default function Dashboard() {
 
     if (demoEnabled && isValidRole(savedRole)) {
       setDemoRole(savedRole)
-      setDisplayName('Demo User')
+      setDisplayName('Demo Trader')
     } else if (isSignedIn) {
       setDisplayName(user?.displayName || 'User')
-    } else {
-      setDisplayName('Guest')
     }
   }, [isSignedIn, user])
 
-  useEffect(() => {
-    if (!isSignedIn || !user?.email) return
-    const supabase = getSupabaseClient()
-    if (!supabase) return
-
-    let cancelled = false
-    const loadProfile = async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('display_name, role')
-        .eq('email', user.email)
-        .maybeSingle()
-
-      if (cancelled) return
-      if (error) {
-        console.error('Supabase profile load failed', error)
-        return
-      }
-
-      if (data) {
-        setDisplayName(data.display_name || user.displayName || 'User')
-        if (data.role && isValidRole(data.role)) {
-          setDemoRole(data.role)
-        }
-        setStatusMessage('Live with Supabase')
-      }
-    }
-
-    loadProfile()
-    return () => {
-      cancelled = true
-    }
-  }, [isSignedIn, user?.email])
-
   const displayRole = isSignedIn ? normalizeRole(user?.role) : isDemo ? demoRole : null
-  const config = displayRole ? roleConfigs[displayRole] : null
+  const config = displayRole ? RoleConfigs[displayRole as keyof typeof RoleConfigs] : null
 
-  useEffect(() => {
-    if (!displayRole || !config) return
-    setKpiList([...config.kpis])
-    setTaskList([...config.tasks])
-    setIncomingItems(config.incomingExample.map(item => ({ ...item })))
-    setSelectedTaskIndex(null)
-    setActiveToolKey(null)
-    setActiveActionModal(null)
-  }, [displayRole, config])
-
-  const handleActionOpen = (action: PrimaryAction) => {
-    setActiveActionModal(action)
-    setActionModalStep(0)
-    setActionModalData({})
-    tracker.log('action_click', action.label, action.detail, { role: displayRole })
-  }
-
-  const handleActionSubmit = (action: PrimaryAction) => {
-    setActionModalStep(1)
-    tracker.log('button_click', `Submit ${action.label}`, JSON.stringify(actionModalData), { role: displayRole })
-
-    setTimeout(() => {
-      setActionModalStep(2)
-      const successMsg = getActionSuccessMessage(action, displayRole)
-      addUpdate({ message: `${action.label} completed. ${successMsg}`, ts: Date.now(), status: 'success' })
-      applyActionResults(action, displayRole)
-      // Add incoming activity from other roles after action
-      if (displayRole === 'Buyer' && action.label === 'Create RFQ') {
-        setTimeout(() => {
-          addUpdate({ message: 'TechCorp Supplies responded to your RFQ with a quote.', ts: Date.now(), status: 'info' })
-        }, 2000)
-      }
-    }, 1200)
-
-    setTimeout(() => {
-      setActiveActionModal(null)
-      setIncomingPanelOpen(true)
-    }, 2500)
-  }
-
-  const getActionSuccessMessage = (action: PrimaryAction, role: Role | null): string => {
-    const lower = action.label.toLowerCase()
-    if (role === 'Buyer') {
-      if (lower.includes('rfq')) return `RFQ #${Math.random().toString().slice(-4).toUpperCase()} sent to ${Math.floor(Math.random() * 15) + 5} suppliers.`
-      if (lower.includes('compare')) return `Best price: $${(45 + Math.random() * 20).toFixed(2)}/unit from top 3 suppliers.`
-      if (lower.includes('track')) return `Tracking activated. ETA: ${Math.floor(Math.random() * 7) + 1} days from now.`
-    } else if (role === 'Seller') {
-      if (lower.includes('respond')) return `Quote submitted for ${Math.floor(Math.random() * 5000) + 500} units at competitive price.`
-      if (lower.includes('inventory')) return `${Math.floor(Math.random() * 500) + 200} units added to available stock.`
-      if (lower.includes('analytics')) return `Revenue trending +${Math.floor(Math.random() * 25) + 10}% vs last month.`
-    } else if (role === 'Exporter') {
-      if (lower.includes('file')) return `Docs filed as EXP-${Date.now().toString().slice(-5)}. Pending port review.`
-      if (lower.includes('schedule')) return `Pickup scheduled for ${['tomorrow', 'Friday', 'Monday'][Math.floor(Math.random() * 3)]}.`
-      if (lower.includes('monitor')) return `Compliance check passed. Clearance: ${95 + Math.floor(Math.random() * 5)}%.`
-    }
-    return `Completed successfully.`
-  }
-
-  const applyActionResults = (action: PrimaryAction, role: Role | null) => {
-    const lower = action.label.toLowerCase()
-    setTaskList((prev) => prev.map((task) => {
-      const taskLower = task.label.toLowerCase()
-      if (lower.includes('rfq') && taskLower.includes('bid')) return { ...task, status: 'In progress', progress: Math.min(100, task.progress + 40) }
-      if (lower.includes('compare') && taskLower.includes('bid')) return { ...task, status: 'Complete', progress: 100 }
-      if (lower.includes('track') && taskLower.includes('shipping')) return { ...task, status: 'Complete', progress: 100 }
-      if (lower.includes('respond') && taskLower.includes('respond')) return { ...task, status: 'Complete', progress: 100 }
-      if (lower.includes('inventory') && taskLower.includes('warehouse')) return { ...task, status: 'Complete', progress: 100 }
-      if (lower.includes('file') && taskLower.includes('manifests')) return { ...task, status: 'Complete', progress: 100 }
-      if (lower.includes('schedule') && taskLower.includes('booking')) return { ...task, status: 'Complete', progress: 100 }
-      if (lower.includes('monitor') && taskLower.includes('customs')) return { ...task, status: 'Complete', progress: 100 }
-      return task
-    }))
-
-    setKpiList((prev) => prev.map((kpi) => {
-      if (lower.includes('rfq') && kpi.label.includes('RFQs')) return { ...kpi, value: typeof kpi.value === 'number' ? kpi.value + 1 : kpi.value, change: '+1', trend: 'up' }
-      if (lower.includes('respond') && kpi.label.includes('Pending')) return { ...kpi, value: typeof kpi.value === 'number' ? Math.max(0, kpi.value - 1) : kpi.value, change: '-1', trend: 'up' }
-      if (lower.includes('file') && kpi.label.includes('Docs')) return { ...kpi, value: typeof kpi.value === 'number' ? Math.max(0, kpi.value - 1) : kpi.value, change: '-1', trend: 'up' }
-      return kpi
-    }))
-  }
-
-  if (!mounted) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--afrigo-bg)] px-4">
-        <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
-          <p className="text-lg font-semibold text-[var(--afrigo-text)]">Loading dashboard…</p>
-        </MotionDiv>
-      </div>
-    )
-  }
+  if (!mounted) return <div className="flex min-h-screen items-center justify-center bg-[var(--afrigo-bg)]"><p className="text-lg font-semibold text-[var(--afrigo-text)]">Loading...</p></div>
 
   if (!config || !displayRole) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Link href="/role-selection" className="rounded-lg bg-[var(--afrigo-primary-green)] px-6 py-2 text-white">
-          Choose role
-        </Link>
-      </div>
-    )
+    return <div className="flex min-h-screen items-center justify-center"><Link href="/role-selection" className="rounded-lg bg-[var(--afrigo-primary-green)] px-6 py-2 text-white">Choose role</Link></div>
   }
 
-  const toolKeys = config.tools
+  // ============================================================================
+  // BUYER MODALS & HANDLERS
+  // ============================================================================
+
+  const handleBuyerCreateRFQ = () => {
+    if (!buyerCreateRFQForm.product || !buyerCreateRFQForm.quantity) return
+    setActiveStep(1)
+    setTimeout(() => {
+      setActiveStep(2)
+      addUpdate(`✓ RFQ posted: ${buyerCreateRFQForm.product} (${buyerCreateRFQForm.quantity} units)`)
+      setBuyerRFQs(prev => [...prev, {
+        id: String(Math.random()),
+        title: buyerCreateRFQForm.product,
+        quantity: parseInt(buyerCreateRFQForm.quantity),
+        unit: 'units',
+        destination: buyerCreateRFQForm.destination,
+        deadline: buyerCreateRFQForm.deadline,
+        budget: buyerCreateRFQForm.budget,
+        status: 'Open',
+        bidCount: 0
+      }])
+    }, 1500)
+    setTimeout(() => setActiveActionId(null), 3000)
+  }
+
+  const handleBuyerSelectBid = (bid: BuyerBid) => {
+    setActiveStep(1)
+    setTimeout(() => {
+      setActiveStep(2)
+      addUpdate(`✓ Bid awarded to ${bid.supplierName} at $${bid.price}/unit`)
+      setBuyerBids(prev => prev.filter(b => b.id !== bid.id))
+    }, 1500)
+    setTimeout(() => setActiveActionId(null), 3000)
+  }
+
+  // ============================================================================
+  // SELLER MODALS & HANDLERS
+  // ============================================================================
+
+  const handleSellerCreateLot = () => {
+    if (!sellerCreateLotForm.product || !sellerCreateLotForm.quantity) return
+    setActiveStep(1)
+    setTimeout(() => {
+      setActiveStep(2)
+      addUpdate(`✓ Lot added: ${sellerCreateLotForm.product} (${sellerCreateLotForm.quantity} kg)`)
+      setSellerLots(prev => [...prev, {
+        id: String(Math.random()),
+        product: sellerCreateLotForm.product,
+        quantity: parseInt(sellerCreateLotForm.quantity),
+        unit: 'kg',
+        grade: sellerCreateLotForm.grade,
+        price: parseInt(sellerCreateLotForm.price),
+        origin: sellerCreateLotForm.origin,
+        inStock: true
+      }])
+    }, 1500)
+    setTimeout(() => setActiveActionId(null), 3000)
+  }
+
+  const handleSellerSubmitQuote = () => {
+    if (!sellerSelectedRFQ || !sellerQuoteForm.price) return
+    setActiveStep(1)
+    setTimeout(() => {
+      setActiveStep(2)
+      addUpdate(`✓ Quote submitted to ${sellerSelectedRFQ.buyerName}: $${sellerQuoteForm.price}/unit`)
+      setSellerRFQs(prev => prev.map(r => r.id === sellerSelectedRFQ.id ? { ...r, status: 'Quoted' } : r))
+      setSellerSelectedRFQ(null)
+    }, 1500)
+    setTimeout(() => setActiveActionId(null), 3000)
+  }
+
+  // ============================================================================
+  // EXPORTER MODALS & HANDLERS
+  // ============================================================================
+
+  const handleExporterUploadDoc = () => {
+    if (!exporterDocForm.docType || !exporterDocForm.file) return
+    setActiveStep(1)
+    setTimeout(() => {
+      setActiveStep(2)
+      addUpdate(`✓ ${exporterDocForm.docType} submitted for ${exporterDocForm.shipmentId}`)
+      setExporterDocs(prev => prev.map(d => d.type === exporterDocForm.docType ? { ...d, status: 'Submitted', uploadedAt: new Date().toISOString().split('T')[0] } : d))
+    }, 1500)
+    setTimeout(() => setActiveActionId(null), 3000)
+  }
+
+  const handleExporterSchedulePickup = () => {
+    if (!exporterPickupForm.warehouse || !exporterPickupForm.date) return
+    setActiveStep(1)
+    setTimeout(() => {
+      setActiveStep(2)
+      addUpdate(`✓ Pickup scheduled for ${exporterPickupForm.warehouse} on ${exporterPickupForm.date}`)
+      setExporterPickups(prev => [...prev, {
+        id: String(Math.random()),
+        warehouseLocation: exporterPickupForm.warehouse,
+        containerCount: parseInt(exporterPickupForm.containers),
+        estimatedWeight: exporterPickupForm.weight,
+        preferredDate: exporterPickupForm.date,
+        carrier: exporterPickupForm.carrier,
+        status: 'Scheduled'
+      }])
+    }, 1500)
+    setTimeout(() => setActiveActionId(null), 3000)
+  }
 
   return (
-    <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-8 pb-12">
+    <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 pb-12">
       {/* HEADER */}
-      <MotionDiv initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.6 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-gradient-to-r from-[var(--afrigo-surface)] to-[var(--afrigo-bg)] p-8 shadow-xl">
-        <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-end">
+      <MotionDiv initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-gradient-to-r from-[var(--afrigo-surface)] to-[var(--afrigo-bg)] p-8 shadow-xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Welcome back</p>
+            <p className="text-sm font-semibold uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Trading Platform</p>
             <h1 className="mt-2 text-4xl font-black text-[var(--afrigo-primary-green)]">{displayName}</h1>
             <p className="mt-1 text-[var(--afrigo-text)]">{config.hero}</p>
             <p className="mt-1 text-sm text-[var(--afrigo-text-secondary)]">{config.subtitle}</p>
           </div>
-          <div className="flex gap-3">
-            {incomingItems.filter(item => item.status === 'new').length > 0 && (
-              <MotionButton
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setIncomingPanelOpen(!incomingPanelOpen)}
-                className="relative rounded-lg bg-gradient-to-r from-orange-500 to-red-500 px-4 py-2 text-sm font-semibold text-white hover:shadow-lg transition"
-              >
-                <MotionDiv animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }} className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-600 flex items-center justify-center text-xs font-bold text-white">
-                  {incomingItems.filter(item => item.status === 'new').length}
-                </MotionDiv>
-                Incoming
-              </MotionButton>
-            )}
-            <div className="rounded-2xl bg-[var(--afrigo-bg)] px-6 py-3">
-              <p className="text-sm text-[var(--afrigo-text-secondary)]">Status: <span className="font-semibold text-[var(--afrigo-primary-green)]">{statusMessage}</span></p>
-            </div>
+          <div className="rounded-2xl bg-[var(--afrigo-bg)] px-6 py-3">
+            <p className="text-sm text-[var(--afrigo-text-secondary)]">Status: <span className="font-semibold text-[var(--afrigo-primary-green)]">{statusMessage}</span></p>
           </div>
         </div>
       </MotionDiv>
 
-      {/* INCOMING ACTIVITY PANEL */}
-      <AnimatePresence>
-        {incomingPanelOpen && (
-          <MotionDiv
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="rounded-3xl border border-orange-500 bg-gradient-to-r from-orange-500/10 to-red-500/10 p-6"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-[var(--afrigo-primary-green)]">{config.incomingLabel}</h3>
-              <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setIncomingPanelOpen(false)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">
-                ✕
-              </MotionButton>
-            </div>
-            <div className="space-y-3">
-              {incomingItems.map((item, idx) => (
-                <MotionDiv
-                  key={item.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  whileHover={{ x: 4 }}
-                  onClick={() => setIncomingItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'read' } : i))}
-                  className={`rounded-xl border p-4 cursor-pointer transition ${item.status === 'new' ? 'border-orange-500 bg-[var(--afrigo-surface)] hover:shadow-md' : 'border-[var(--afrigo-border)] bg-[var(--afrigo-bg)]'}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {item.status === 'new' && <MotionDiv animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity }} className="h-2 w-2 rounded-full bg-orange-500" />}
-                        <p className="font-semibold text-[var(--afrigo-text)]">{item.from}</p>
-                      </div>
-                      <p className="text-xs text-[var(--afrigo-secondary-gold)] mt-1">{item.type}</p>
-                      <p className="text-sm text-[var(--afrigo-text-secondary)] mt-2">{item.message}</p>
-                    </div>
-                    <span className="text-xs text-[var(--afrigo-text-secondary)] whitespace-nowrap">{Math.floor((Date.now() - item.time) / 60000)}m ago</span>
-                  </div>
-                </MotionDiv>
-              ))}
-            </div>
-          </MotionDiv>
-        )}
-      </AnimatePresence>
-
       {/* PRIMARY ACTIONS */}
       <div className="grid gap-4 lg:grid-cols-3">
-        {config.primaryActions.map((action, i) => (
+        {config.actions.map((action, i) => (
           <MotionDiv
-            key={i}
+            key={action.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
             whileHover={{ y: -8, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => handleActionOpen(action)}
+            onClick={() => { setActiveActionId(action.id); setActiveStep(0) }}
             className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${action.color} p-8 text-white shadow-lg hover:shadow-2xl cursor-pointer transition`}
           >
             <div className="absolute -right-16 -top-16 h-32 w-32 rounded-full bg-white opacity-10 group-hover:scale-150 transition-transform duration-300" />
             <div className="relative z-10">
-              <MotionDiv animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 3, repeat: Infinity }} className="text-5xl mb-3">
-                {action.icon}
-              </MotionDiv>
+              <MotionDiv animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 3, repeat: Infinity }} className="text-5xl mb-3">{action.icon}</MotionDiv>
               <h3 className="text-2xl font-black">{action.label}</h3>
               <p className="mt-2 text-sm opacity-90">{action.detail}</p>
-              <MotionButton
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="mt-4 rounded-lg bg-white/20 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/30"
-              >
+              <MotionButton whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="mt-4 rounded-lg bg-white/20 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/30">
                 Launch →
               </MotionButton>
             </div>
@@ -524,195 +472,558 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-4 lg:grid-cols-4">
-        {kpiList.map((kpi, i) => (
-          <MotionDiv
-            key={i}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.05 }}
-            whileHover={{ y: -4, scale: 1.02 }}
-            className="rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-6 shadow-lg hover:shadow-xl transition cursor-pointer"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-[var(--afrigo-text-secondary)]">{kpi.label}</p>
-                <MotionDiv initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }} className="mt-3 text-3xl font-black text-[var(--afrigo-primary-green)]">
-                  {kpi.value}
-                </MotionDiv>
-              </div>
-              <MotionDiv animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity }} className="text-3xl">
-                {kpi.icon}
-              </MotionDiv>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <span className={`text-sm font-semibold ${kpi.trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
-                {kpi.trend === 'up' ? '↑' : '↓'} {kpi.change}
-              </span>
-            </div>
-          </MotionDiv>
-        ))}
-      </div>
-
-      {/* ACTIVE TASKS */}
-      <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-[var(--afrigo-primary-green)]">Active Tasks</h2>
-            <p className="mt-2 text-[var(--afrigo-text-secondary)]">Your immediate action items</p>
-          </div>
-          <div className="rounded-full bg-[var(--afrigo-secondary-gold)] px-3 py-1 text-xs font-semibold text-white">{taskList.length} tasks</div>
-        </div>
-        <div className="space-y-4">
-          {taskList.map((task, i) => (
-            <MotionDiv
-              key={i}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-              whileHover={{ x: 4 }}
-              className="rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 hover:shadow-md transition cursor-pointer"
-              onClick={() => setSelectedTaskIndex(selectedTaskIndex === i ? null : i)}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <MotionDiv animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-2xl">
-                      {task.icon}
-                    </MotionDiv>
-                    <div>
-                      <h3 className="font-semibold text-[var(--afrigo-text)]">{task.label}</h3>
-                      <p className="text-sm text-[var(--afrigo-text-secondary)]">{task.detail}</p>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-[var(--afrigo-text-secondary)]">{task.status} • {task.progress}%</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--afrigo-border)]">
-                      <MotionDiv initial={{ width: 0 }} animate={{ width: `${task.progress}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)]" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {selectedTaskIndex === i && (
-                <MotionDiv initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-4 pt-4 border-t border-[var(--afrigo-border)]">
-                  <p className="text-sm text-[var(--afrigo-text-secondary)]">Full Details: {task.detail}</p>
-                  <p className="mt-2 text-xs text-[var(--afrigo-text-secondary)]">Current Status: {task.status}</p>
-                </MotionDiv>
-              )}
-            </MotionDiv>
-          ))}
-        </div>
-      </MotionDiv>
-
-      {/* TOOLS */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {toolKeys.map((toolKey, i) => {
-          const toolData = toolsData[toolKey]
-          return (
-            <MotionDiv
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              whileHover={{ y: -4, scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setActiveToolKey(activeToolKey === toolKey ? null : toolKey)}
-              className={`group rounded-2xl border transition cursor-pointer shadow-lg hover:shadow-xl p-6 ${activeToolKey === toolKey ? 'border-[var(--afrigo-primary-green)] bg-[var(--afrigo-primary-green)]/5 ring-2 ring-[var(--afrigo-primary-green)]/20' : 'border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] hover:border-[var(--afrigo-primary-green)]'}`}
-            >
-              <MotionDiv animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2.5, repeat: Infinity }} className="text-4xl mb-3">
-                {toolData?.icon}
-              </MotionDiv>
-              <h3 className="font-semibold text-[var(--afrigo-text)] group-hover:text-[var(--afrigo-primary-green)] transition">{toolKey}</h3>
-              <MotionButton
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="mt-4 rounded-lg bg-[var(--afrigo-bg)] px-3 py-2 text-xs font-semibold text-[var(--afrigo-primary-green)] group-hover:bg-[var(--afrigo-primary-green)] group-hover:text-white transition"
-              >
-                {activeToolKey === toolKey ? 'Close ✕' : 'Open →'}
-              </MotionButton>
-            </MotionDiv>
-          )
-        })}
-      </div>
-
-      {/* TOOL CONTENT PANEL */}
-      <AnimatePresence>
-        {activeToolKey && (
-          <MotionDiv initial={{ opacity: 0, y: 20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: 20, height: 0 }} className="rounded-3xl border border-[var(--afrigo-primary-green)] bg-gradient-to-r from-[var(--afrigo-primary-green)]/5 to-[var(--afrigo-secondary-gold)]/5 p-8 shadow-lg">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Tool Panel</p>
-                <h3 className="mt-2 text-2xl font-black text-[var(--afrigo-primary-green)]">{toolsData[activeToolKey]?.title}</h3>
-              </div>
-              <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveToolKey(null)} className="rounded-full bg-[var(--afrigo-primary-green)] p-2 text-white hover:opacity-90">
-                ✕
-              </MotionButton>
-            </div>
-            <div className="space-y-3">
-              {toolsData[activeToolKey]?.items.map((item: any, idx: number) => (
-                <MotionDiv
-                  key={idx}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  whileHover={{ x: 4 }}
-                  className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-4 hover:shadow-md transition"
-                >
-                  {item.label && (
-                    <>
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="font-semibold text-[var(--afrigo-text)]">{item.label}</p>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-[var(--afrigo-primary-green)]/20 text-[var(--afrigo-primary-green)]">{item.status || item.value || item.role}</span>
+      {/* BUYER ACTION MODALS */}
+      {displayRole === 'Buyer' && (
+        <>
+          {/* CREATE RFQ MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'create-rfq' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-lg w-full">
+                    {activeStep === 0 && (
+                      <>
+                        <div className="mb-6">
+                          <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Create New Request</p>
+                          <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Post RFQ</h2>
+                        </div>
+                        <div className="space-y-4">
+                          <input type="text" placeholder="Product name" value={buyerCreateRFQForm.product} onChange={(e) => setBuyerCreateRFQForm({...buyerCreateRFQForm, product: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                          <input type="number" placeholder="Quantity needed" value={buyerCreateRFQForm.quantity} onChange={(e) => setBuyerCreateRFQForm({...buyerCreateRFQForm, quantity: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                          <input type="text" placeholder="Destination country" value={buyerCreateRFQForm.destination} onChange={(e) => setBuyerCreateRFQForm({...buyerCreateRFQForm, destination: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                          <input type="text" placeholder="Budget range" value={buyerCreateRFQForm.budget} onChange={(e) => setBuyerCreateRFQForm({...buyerCreateRFQForm, budget: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                          <input type="date" value={buyerCreateRFQForm.deadline} onChange={(e) => setBuyerCreateRFQForm({...buyerCreateRFQForm, deadline: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                        </div>
+                        <div className="mt-6 flex gap-3">
+                          <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="flex-1 rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] py-3 font-semibold text-[var(--afrigo-text)] hover:border-[var(--afrigo-primary-green)] hover:text-[var(--afrigo-primary-green)]">Cancel</MotionButton>
+                          <MotionButton whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={handleBuyerCreateRFQ} className="flex-1 rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 font-semibold text-white hover:opacity-90">Post RFQ</MotionButton>
+                        </div>
+                      </>
+                    )}
+                    {activeStep === 1 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-3xl">🔍</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Publishing RFQ...</p>
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-blue-500 to-blue-600" />
                       </div>
-                      {item.details && <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">{item.details}</p>}
-                      {item.date && <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">{item.date}</p>}
-                      {item.issued && <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">{item.issued}</p>}
-                    </>
-                  )}
-                  {item.metric && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-[var(--afrigo-text)]">{item.metric}</p>
-                      <p className="text-2xl font-black text-[var(--afrigo-primary-green)]">{item.value}</p>
-                    </div>
-                  )}
-                  {item.note && (
-                    <>
-                      <p className="text-xs font-semibold text-[var(--afrigo-secondary-gold)]">{item.author} • {item.date}</p>
-                      <p className="mt-2 text-sm text-[var(--afrigo-text)]">{item.note}</p>
-                    </>
-                  )}
-                  {item.name && (
-                    <div>
-                      <p className="font-semibold text-[var(--afrigo-text)]">{item.name}</p>
-                      <p className="text-xs text-[var(--afrigo-text-secondary)]">{item.role}</p>
-                      <p className="mt-2 text-xs text-green-500">• {item.status}</p>
-                      <MotionButton
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="mt-2 w-full rounded-lg bg-[var(--afrigo-primary-green)] py-1 text-xs font-semibold text-white hover:opacity-90"
-                      >
-                        Chat
-                      </MotionButton>
-                    </div>
-                  )}
+                    )}
+                    {activeStep === 2 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">RFQ Posted!</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Now visible to {Math.floor(Math.random() * 50) + 20}+ suppliers in your network</p>
+                      </div>
+                    )}
+                  </div>
                 </MotionDiv>
-              ))}
-            </div>
-          </MotionDiv>
-        )}
-      </AnimatePresence>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* COMPARE BIDS MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'compare-bids' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    {activeStep === 0 && (
+                      <>
+                        <div className="mb-6 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Received Bids</p>
+                            <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Compare Proposals</h2>
+                          </div>
+                          <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                        </div>
+                        <div className="space-y-3">
+                          {buyerBids.map((bid, idx) => (
+                            <MotionDiv key={bid.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} whileHover={{ scale: 1.02 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4 cursor-pointer hover:border-[var(--afrigo-primary-green)] transition">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold text-[var(--afrigo-text)]">{bid.supplierName}</p>
+                                    <div className="flex">
+                                      {[...Array(5)].map((_, i) => (
+                                        <span key={i} className={i < Math.floor(bid.rating) ? 'text-yellow-400' : 'text-[var(--afrigo-text-secondary)]'}>★</span>
+                                      ))}
+                                    </div>
+                                    <span className="text-xs text-[var(--afrigo-text-secondary)]">({bid.rating})</span>
+                                  </div>
+                                  <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                                    <div>
+                                      <p className="text-xs text-[var(--afrigo-text-secondary)]">Price</p>
+                                      <p className="font-bold text-[var(--afrigo-primary-green)]">${bid.price}/unit</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-[var(--afrigo-text-secondary)]">Delivery</p>
+                                      <p className="font-semibold text-[var(--afrigo-text)]">{bid.delivery}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-[var(--afrigo-text-secondary)]">Terms</p>
+                                      <p className="font-semibold text-[var(--afrigo-text)]">{bid.terms.split(',')[0]}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <MotionButton whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { setBuyerSelectedBid(bid); handleBuyerSelectBid(bid) }} className="rounded-lg bg-[var(--afrigo-primary-green)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+                                  Select
+                                </MotionButton>
+                              </div>
+                            </MotionDiv>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {activeStep === 1 && buyerSelectedBid && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center text-3xl">⚖️</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Processing Selection...</p>
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-purple-500 to-purple-600" />
+                      </div>
+                    )}
+                    {activeStep === 2 && buyerSelectedBid && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Bid Awarded!</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Contract initiated with {buyerSelectedBid.supplierName}</p>
+                        <p className="mt-1 text-xs text-[var(--afrigo-text-secondary)]">Total: ${buyerSelectedBid.price} × 5000 units = ${(buyerSelectedBid.price * 5000).toLocaleString()}</p>
+                      </div>
+                    )}
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* TRACK SHIPMENT MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'track-shipment' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Live Tracking</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Your Shipments</h2>
+                      </div>
+                      <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                    </div>
+                    <div className="space-y-4">
+                      {buyerShipments.map((shipment, idx) => (
+                        <MotionDiv key={shipment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="font-semibold text-[var(--afrigo-text)]">{shipment.carrier}</p>
+                              <p className="text-xs text-[var(--afrigo-text-secondary)]">{shipment.location}</p>
+                            </div>
+                            <MotionDiv className={`px-3 py-1 rounded-full text-xs font-semibold ${shipment.status === 'Delivered' ? 'bg-green-500/20 text-green-600' : 'bg-blue-500/20 text-blue-600'}`}>
+                              {shipment.status}
+                            </MotionDiv>
+                          </div>
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between text-xs mb-2">
+                              <span className="text-[var(--afrigo-text-secondary)]">Progress</span>
+                              <span className="font-semibold text-[var(--afrigo-primary-green)]">{shipment.progress}%</span>
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--afrigo-border)]">
+                              <MotionDiv initial={{ width: 0 }} animate={{ width: `${shipment.progress}%` }} transition={{ duration: 0.8 }} className="h-full bg-gradient-to-r from-green-500 to-green-600" />
+                            </div>
+                          </div>
+                          <p className="text-xs text-[var(--afrigo-text-secondary)]">ETA: {shipment.eta}</p>
+                        </MotionDiv>
+                      ))}
+                    </div>
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+
+      {/* SELLER ACTION MODALS */}
+      {displayRole === 'Seller' && (
+        <>
+          {/* RESPOND TO RFQ MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'respond-rfq' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    {activeStep === 0 && (
+                      <>
+                        <div className="mb-6 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Open Opportunities</p>
+                            <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Respond to RFQs</h2>
+                          </div>
+                          <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                        </div>
+                        {sellerSelectedRFQ ? (
+                          <div className="space-y-4">
+                            <div className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                              <p className="text-xs text-[var(--afrigo-text-secondary)]">Buyer: {sellerSelectedRFQ.buyerName}</p>
+                              <p className="font-semibold text-[var(--afrigo-text)] mt-1">{sellerSelectedRFQ.product}</p>
+                              <p className="text-sm text-[var(--afrigo-text-secondary)] mt-1">Qty: {sellerSelectedRFQ.quantity} units • Deadline: {sellerSelectedRFQ.deadline}</p>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Your Quote (per unit)</label>
+                              <input type="number" placeholder="$25.00" value={sellerQuoteForm.price} onChange={(e) => setSellerQuoteForm({...sellerQuoteForm, price: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Delivery Timeline</label>
+                              <input type="text" placeholder="15 days" value={sellerQuoteForm.delivery} onChange={(e) => setSellerQuoteForm({...sellerQuoteForm, delivery: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Payment Terms</label>
+                              <input type="text" placeholder="50% upfront, 50% on delivery" value={sellerQuoteForm.terms} onChange={(e) => setSellerQuoteForm({...sellerQuoteForm, terms: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                            </div>
+                            <div className="flex gap-3">
+                              <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setSellerSelectedRFQ(null)} className="flex-1 rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] py-3 font-semibold text-[var(--afrigo-text)] hover:border-[var(--afrigo-primary-green)] hover:text-[var(--afrigo-primary-green)]">Back</MotionButton>
+                              <MotionButton whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={handleSellerSubmitQuote} className="flex-1 rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 font-semibold text-white hover:opacity-90">Submit Quote</MotionButton>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {sellerRFQs.map((rfq, idx) => (
+                              <MotionDiv key={rfq.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} whileHover={{ scale: 1.02 }} onClick={() => setSellerSelectedRFQ(rfq)} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4 cursor-pointer hover:border-[var(--afrigo-primary-green)] transition">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <p className="text-xs text-[var(--afrigo-text-secondary)]">{rfq.buyerName}</p>
+                                    <p className="font-semibold text-[var(--afrigo-text)] mt-1">{rfq.product}</p>
+                                    <p className="text-sm text-[var(--afrigo-text-secondary)] mt-1">{rfq.quantity} units • {rfq.deadline}</p>
+                                  </div>
+                                  <MotionDiv className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/20 text-orange-600">
+                                    New
+                                  </MotionDiv>
+                                </div>
+                              </MotionDiv>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {activeStep === 1 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center text-3xl">✉️</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Submitting Quote...</p>
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600" />
+                      </div>
+                    )}
+                    {activeStep === 2 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Quote Sent!</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Your proposal is now visible to {sellerSelectedRFQ?.buyerName}</p>
+                      </div>
+                    )}
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* MANAGE INVENTORY MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'manage-inventory' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Your Inventory</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Manage Lots</h2>
+                      </div>
+                      <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                    </div>
+                    {activeStep === 0 && (
+                      <div className="space-y-4">
+                        <div className="space-y-3 mb-6">
+                          {sellerLots.map((lot, idx) => (
+                            <MotionDiv key={lot.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className="font-semibold text-[var(--afrigo-text)]">{lot.product}</p>
+                                  <p className="text-xs text-[var(--afrigo-text-secondary)] mt-1">{lot.origin} • Grade: {lot.grade}</p>
+                                  <div className="flex gap-4 mt-2 text-sm">
+                                    <span>📦 {lot.quantity.toLocaleString()} {lot.unit}</span>
+                                    <span className="text-[var(--afrigo-primary-green)] font-semibold">${lot.price}/{lot.unit}</span>
+                                  </div>
+                                </div>
+                                <MotionDiv className={`px-3 py-1 rounded-full text-xs font-semibold ${lot.inStock ? 'bg-green-500/20 text-green-600' : 'bg-red-500/20 text-red-600'}`}>
+                                  {lot.inStock ? 'In Stock' : 'Out'}
+                                </MotionDiv>
+                              </div>
+                            </MotionDiv>
+                          ))}
+                        </div>
+                        <div className="rounded-xl border-2 border-dashed border-[var(--afrigo-border)] p-4 text-center">
+                          <p className="text-[var(--afrigo-text-secondary)] mb-3">Add New Lot</p>
+                          <input type="text" placeholder="Product name" value={sellerCreateLotForm.product} onChange={(e) => setSellerCreateLotForm({...sellerCreateLotForm, product: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-2 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] mb-2" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input type="number" placeholder="Quantity" value={sellerCreateLotForm.quantity} onChange={(e) => setSellerCreateLotForm({...sellerCreateLotForm, quantity: e.target.value})} className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-3 py-2 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)]" />
+                            <input type="text" placeholder="Grade" value={sellerCreateLotForm.grade} onChange={(e) => setSellerCreateLotForm({...sellerCreateLotForm, grade: e.target.value})} className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-3 py-2 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)]" />
+                            <input type="number" placeholder="Price" value={sellerCreateLotForm.price} onChange={(e) => setSellerCreateLotForm({...sellerCreateLotForm, price: e.target.value})} className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-3 py-2 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)]" />
+                            <input type="text" placeholder="Origin" value={sellerCreateLotForm.origin} onChange={(e) => setSellerCreateLotForm({...sellerCreateLotForm, origin: e.target.value})} className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-3 py-2 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)]" />
+                          </div>
+                          <MotionButton whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={handleSellerCreateLot} className="mt-3 w-full rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-2 text-sm font-semibold text-white hover:opacity-90">
+                            Add Lot
+                          </MotionButton>
+                        </div>
+                      </div>
+                    )}
+                    {activeStep === 1 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center text-3xl">📦</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Adding to Inventory...</p>
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600" />
+                      </div>
+                    )}
+                    {activeStep === 2 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Lot Added!</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Now visible to buyers seeking your products</p>
+                      </div>
+                    )}
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* VIEW ANALYTICS MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'view-analytics' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Performance Data</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Your Analytics</h2>
+                      </div>
+                      <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <MotionDiv initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                        <p className="text-xs text-[var(--afrigo-text-secondary)]">Total Bids</p>
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring' }} className="text-3xl font-black text-[var(--afrigo-primary-green)] mt-2">{sellerAnalytics.totalBids}</MotionDiv>
+                        <p className="text-xs text-green-600 mt-1">+4 this week</p>
+                      </MotionDiv>
+                      <MotionDiv initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                        <p className="text-xs text-[var(--afrigo-text-secondary)]">Win Rate</p>
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring' }} className="text-3xl font-black text-[var(--afrigo-primary-green)] mt-2">{sellerAnalytics.winRate}%</MotionDiv>
+                        <p className="text-xs text-green-600 mt-1">+8% vs last month</p>
+                      </MotionDiv>
+                      <MotionDiv initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                        <p className="text-xs text-[var(--afrigo-text-secondary)]">This Month</p>
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring' }} className="text-3xl font-black text-[var(--afrigo-primary-green)] mt-2">${(sellerAnalytics.revenueThisMonth / 1000).toFixed(0)}K</MotionDiv>
+                        <p className="text-xs text-green-600 mt-1">+22% growth</p>
+                      </MotionDiv>
+                      <MotionDiv initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                        <p className="text-xs text-[var(--afrigo-text-secondary)]">Avg Response</p>
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring' }} className="text-3xl font-black text-[var(--afrigo-primary-green)] mt-2">{sellerAnalytics.responseTime}h</MotionDiv>
+                        <p className="text-xs text-green-600 mt-1">Industry avg: 4h</p>
+                      </MotionDiv>
+                    </div>
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+
+      {/* EXPORTER ACTION MODALS */}
+      {displayRole === 'Exporter' && (
+        <>
+          {/* FILE EXPORT DOCS MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'file-export-docs' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Document Management</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Export Documents</h2>
+                      </div>
+                      <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                    </div>
+                    {activeStep === 0 && (
+                      <div className="space-y-4">
+                        <div className="space-y-3 mb-6">
+                          {exporterDocs.map((doc, idx) => (
+                            <MotionDiv key={doc.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <p className="font-semibold text-[var(--afrigo-text)]">{doc.type}</p>
+                                  <p className="text-xs text-[var(--afrigo-text-secondary)] mt-1">{doc.shipmentId}</p>
+                                </div>
+                                <MotionDiv className={`px-3 py-1 rounded-full text-xs font-semibold ${doc.status === 'Approved' ? 'bg-green-500/20 text-green-600' : doc.status === 'Submitted' ? 'bg-blue-500/20 text-blue-600' : 'bg-yellow-500/20 text-yellow-600'}`}>
+                                  {doc.status}
+                                </MotionDiv>
+                              </div>
+                            </MotionDiv>
+                          ))}
+                        </div>
+                        <div className="rounded-xl border-2 border-dashed border-[var(--afrigo-border)] p-4">
+                          <p className="text-[var(--afrigo-text-secondary)] mb-3 font-semibold">Upload New Document</p>
+                          <select value={exporterDocForm.docType} onChange={(e) => setExporterDocForm({...exporterDocForm, docType: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] mb-3">
+                            <option>Invoice</option>
+                            <option>COO</option>
+                            <option>Packing List</option>
+                            <option>BoL</option>
+                            <option>Customs</option>
+                          </select>
+                          <input type="text" placeholder="Shipment ID" value={exporterDocForm.shipmentId} onChange={(e) => setExporterDocForm({...exporterDocForm, shipmentId: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] mb-3" />
+                          <div className="border-2 border-dashed border-[var(--afrigo-border)] rounded-lg p-4 text-center mb-3">
+                            <p className="text-[var(--afrigo-text-secondary)] text-sm">Drag file here or click to upload</p>
+                          </div>
+                          <MotionButton whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={handleExporterUploadDoc} className="w-full rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 text-sm font-semibold text-white hover:opacity-90">
+                            Upload & Submit
+                          </MotionButton>
+                        </div>
+                      </div>
+                    )}
+                    {activeStep === 1 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-rose-500 to-rose-600 flex items-center justify-center text-3xl">📄</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Uploading Document...</p>
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-rose-500 to-rose-600" />
+                      </div>
+                    )}
+                    {activeStep === 2 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Document Submitted!</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Awaiting customs clearance</p>
+                      </div>
+                    )}
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* SCHEDULE PICKUP MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'schedule-pickup' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Logistics Coordination</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Schedule Pickup</h2>
+                      </div>
+                      <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                    </div>
+                    {activeStep === 0 && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Warehouse Location</label>
+                          <input type="text" placeholder="e.g., Kampala Central Hub" value={exporterPickupForm.warehouse} onChange={(e) => setExporterPickupForm({...exporterPickupForm, warehouse: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Containers</label>
+                            <input type="number" placeholder="1" value={exporterPickupForm.containers} onChange={(e) => setExporterPickupForm({...exporterPickupForm, containers: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Est. Weight</label>
+                            <input type="text" placeholder="e.g., 5,000 kg" value={exporterPickupForm.weight} onChange={(e) => setExporterPickupForm({...exporterPickupForm, weight: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Preferred Date</label>
+                          <input type="date" value={exporterPickupForm.date} onChange={(e) => setExporterPickupForm({...exporterPickupForm, date: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Preferred Carrier</label>
+                          <input type="text" placeholder="e.g., DHL Global, FedEx, etc." value={exporterPickupForm.carrier} onChange={(e) => setExporterPickupForm({...exporterPickupForm, carrier: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
+                        </div>
+                        <div className="flex gap-3">
+                          <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="flex-1 rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] py-3 font-semibold text-[var(--afrigo-text)] hover:border-[var(--afrigo-primary-green)] hover:text-[var(--afrigo-primary-green)]">Cancel</MotionButton>
+                          <MotionButton whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={handleExporterSchedulePickup} className="flex-1 rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 font-semibold text-white hover:opacity-90">Schedule</MotionButton>
+                        </div>
+                      </div>
+                    )}
+                    {activeStep === 1 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 flex items-center justify-center text-3xl">🛳️</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Booking Pickup...</p>
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600" />
+                      </div>
+                    )}
+                    {activeStep === 2 && (
+                      <div className="text-center py-8">
+                        <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
+                        <p className="font-semibold text-[var(--afrigo-text)] text-lg">Pickup Scheduled!</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Confirmation sent to {exporterPickupForm.carrier || 'logistics partner'}</p>
+                      </div>
+                    )}
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* MONITOR COMPLIANCE MODAL */}
+          <AnimatePresence>
+            {activeActionId === 'monitor-compliance' && (
+              <>
+                <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveActionId(null)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+                <MotionDiv initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    <div className="mb-6 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Regulatory Status</p>
+                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">Compliance Checklist</h2>
+                      </div>
+                      <MotionButton whileTap={{ scale: 0.95 }} onClick={() => setActiveActionId(null)} className="text-[var(--afrigo-text-secondary)] hover:text-[var(--afrigo-text)]">✕</MotionButton>
+                    </div>
+                    <div className="space-y-3">
+                      {exporterCompliance.map((item, idx) => (
+                        <MotionDiv key={item.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <p className="text-xs text-[var(--afrigo-text-secondary)] font-semibold uppercase">{item.category}</p>
+                              <p className="font-semibold text-[var(--afrigo-text)] mt-1">{item.requirement}</p>
+                              <p className="text-xs text-[var(--afrigo-text-secondary)] mt-1">Due: {item.dueDate}</p>
+                            </div>
+                            <MotionDiv className={`px-3 py-1 rounded-full text-xs font-semibold ${item.status === 'Verified' ? 'bg-green-500/20 text-green-600' : item.status === 'Completed' ? 'bg-blue-500/20 text-blue-600' : 'bg-yellow-500/20 text-yellow-600'}`}>
+                              {item.status}
+                            </MotionDiv>
+                          </div>
+                        </MotionDiv>
+                      ))}
+                    </div>
+                    <div className="mt-6 p-4 rounded-xl border border-green-500/20 bg-green-500/5">
+                      <p className="text-sm text-green-600 font-semibold">✓ 67% Compliant</p>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--afrigo-border)] mt-2">
+                        <MotionDiv initial={{ width: 0 }} animate={{ width: '67%' }} transition={{ duration: 1 }} className="h-full bg-gradient-to-r from-green-500 to-green-600" />
+                      </div>
+                    </div>
+                  </div>
+                </MotionDiv>
+              </>
+            )}
+          </AnimatePresence>
+        </>
+      )}
 
       {/* ACTIVITY FEED */}
       <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-black text-[var(--afrigo-primary-green)]">Recent Activity</h2>
-          <MotionButton whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={connectStream} className="rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-2 text-sm font-semibold hover:border-[var(--afrigo-primary-green)]">
-            Refresh
-          </MotionButton>
-        </div>
+        <h2 className="text-2xl font-black text-[var(--afrigo-primary-green)] mb-6">Recent Activity</h2>
         <div className="space-y-3">
           {updates.length === 0 ? (
             <div className="rounded-xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] p-6 text-center text-[var(--afrigo-text-secondary)]">
@@ -720,13 +1031,7 @@ export default function Dashboard() {
             </div>
           ) : (
             updates.map((update, i) => (
-              <MotionDiv
-                key={i}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.4 }}
-                className="flex items-center justify-between rounded-xl bg-[var(--afrigo-bg)] p-4 hover:shadow-md transition border border-[var(--afrigo-border)]/50 hover:border-[var(--afrigo-primary-green)]"
-              >
+              <MotionDiv key={i} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center justify-between rounded-xl bg-[var(--afrigo-bg)] p-4 hover:shadow-md transition border border-[var(--afrigo-border)]/50 hover:border-[var(--afrigo-primary-green)]">
                 <p className="text-sm text-[var(--afrigo-text)]">{update.message}</p>
                 <span className="text-xs text-[var(--afrigo-text-secondary)]">{new Date(update.ts).toLocaleTimeString()}</span>
               </MotionDiv>
@@ -734,104 +1039,6 @@ export default function Dashboard() {
           )}
         </div>
       </MotionDiv>
-
-      {/* ACTION MODAL */}
-      <AnimatePresence>
-        {activeActionModal && (
-          <>
-            <MotionDiv
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setActiveActionModal(null)}
-              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-            />
-            <MotionDiv
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              transition={{ type: 'spring', stiffness: 100 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            >
-              <div className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-2xl max-w-lg w-full">
-                {actionModalStep === 0 && (
-                  <>
-                    <div className="flex items-center justify-between mb-6">
-                      <div>
-                        <p className="text-sm uppercase tracking-widest text-[var(--afrigo-secondary-gold)]">Execute Action</p>
-                        <h2 className="mt-3 text-2xl font-black text-[var(--afrigo-primary-green)]">{activeActionModal.label}</h2>
-                      </div>
-                      <p className="text-4xl">{activeActionModal.icon}</p>
-                    </div>
-
-                    <p className="text-[var(--afrigo-text-secondary)]">{activeActionModal.detail}</p>
-
-                    <div className="mt-6 space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Details</label>
-                        <input
-                          type="text"
-                          placeholder="Enter details..."
-                          onChange={(e) => setActionModalData({ ...actionModalData, details: e.target.value })}
-                          className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20 transition"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Quantity / Amount</label>
-                        <input
-                          type="number"
-                          placeholder="0"
-                          onChange={(e) => setActionModalData({ ...actionModalData, quantity: e.target.value })}
-                          className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20 transition"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex gap-3">
-                      <MotionButton
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setActiveActionModal(null)}
-                        className="flex-1 rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] py-3 font-semibold text-[var(--afrigo-text)] hover:border-[var(--afrigo-primary-green)] hover:text-[var(--afrigo-primary-green)] transition"
-                      >
-                        Cancel
-                      </MotionButton>
-                      <MotionButton
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleActionSubmit(activeActionModal)}
-                        className="flex-1 rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 font-semibold text-white hover:opacity-90 shadow-lg hover:shadow-xl transition"
-                      >
-                        Submit & Execute
-                      </MotionButton>
-                    </div>
-                  </>
-                )}
-
-                {actionModalStep === 1 && (
-                  <div className="text-center py-8">
-                    <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] flex items-center justify-center text-3xl">
-                      ⚙️
-                    </MotionDiv>
-                    <p className="font-semibold text-[var(--afrigo-text)] text-lg">Processing...</p>
-                    <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Executing {activeActionModal.label}</p>
-                    <MotionDiv initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.2 }} className="mt-4 h-1 rounded-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)]" />
-                  </div>
-                )}
-
-                {actionModalStep === 2 && (
-                  <div className="text-center py-8">
-                    <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">
-                      ✓
-                    </MotionDiv>
-                    <p className="font-semibold text-[var(--afrigo-text)] text-lg">Success!</p>
-                    <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">{getActionSuccessMessage(activeActionModal, displayRole)}</p>
-                  </div>
-                )}
-              </div>
-            </MotionDiv>
-          </>
-        )}
-      </AnimatePresence>
     </MotionDiv>
   )
 }
