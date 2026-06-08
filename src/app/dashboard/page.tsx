@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
 import { getSupabaseClient } from '@/lib/supabaseClient'
 import { isValidRole, normalizeRole, Role } from '@/lib/roles'
+import { useActivityTracker } from '@/lib/activityTracker'
 
 const MotionDiv = motion.div as any
 const MotionButton = motion.button as any
@@ -115,6 +116,7 @@ const commonTools = [
 
 export default function Dashboard() {
   const { user, isSignedIn, isDemo } = useAuth()
+  const tracker = useActivityTracker()
   const [updates, setUpdates] = useState<UpdateEvent[]>([])
   const [statusMessage, setStatusMessage] = useState('Live')
   const [mounted, setMounted] = useState(false)
@@ -218,6 +220,7 @@ export default function Dashboard() {
   const handleActionClick = (action: PrimaryAction) => {
     setSelectedAction(action)
     setActionFeedback(`Opening ${action.label} — ${action.detail}`)
+    tracker.log('action_click', action.label, action.detail, { color: action.color })
   }
 
   const handleTaskView = (index: number) => {
@@ -225,6 +228,7 @@ export default function Dashboard() {
     const task = displayData?.tasks[index]
     if (task) {
       setActionFeedback(`Viewing task: ${task.label}`)
+      tracker.log('task_view', task.label, task.detail, { status: task.status, progress: task.progress })
     }
   }
 
@@ -232,6 +236,7 @@ export default function Dashboard() {
     setOpenToolIndex(index)
     const tool = commonTools[index]
     setActionFeedback(`Opening ${tool.label}`)
+    tracker.log('action_click', tool.label, tool.detail)
   }
 
   if (!mounted) {

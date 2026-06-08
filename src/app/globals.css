@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --afrigo-primary-green: #0F5B46;
+  --afrigo-primary-green-hover: #0A4335;
+  --afrigo-primary-green-light: #1A8A67;
+  --afrigo-secondary-gold: #C89B3C;
+  --afrigo-accent-blue: #1E88E5;
+  --afrigo-success: #12B76A;
+  --afrigo-success-light: #E6F6EC;
+  --afrigo-warning: #F79009;
+  --afrigo-error: #F04438;
+  --afrigo-error-light: #FFE0DD;
+  --afrigo-bg: #F7F8FA;
+  --afrigo-surface: #FFFFFF;
+  --afrigo-text: #111827;
+  --afrigo-text-secondary: #667085;
+  --afrigo-border: #E4E7EC;
+  --afrigo-divider: #D0D5DD;
+  --afrigo-disabled: #A0AEC0;
+  --afrigo-transition: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body, #__next {
+  min-height: 100%;
+}
+
+body {
+  background: var(--afrigo-bg);
+  color: var(--afrigo-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+::selection {
+  background: var(--afrigo-secondary-gold);
+  color: white;
+}
+
+button,
+input,
+select,
+textarea {
+  transition: background-color var(--afrigo-transition), color var(--afrigo-transition), border-color var(--afrigo-transition), transform var(--afrigo-transition), box-shadow var(--afrigo-transition);
+}
+
+.afrigo-card {
+  background: var(--afrigo-surface);
+  border: 1px solid var(--afrigo-border);
+  box-shadow: 0 8px 30px rgba(17, 24, 39, 0.06);
+  border-radius: 1.5rem;
+}
+
+.afrigo-pill {
+  border-radius: 999px;
+}
+
+.afrigo-icon-button {
+  background: rgba(15, 91, 70, 0.08);
+  color: var(--afrigo-primary-green);
+}
+
+.afrigo-icon-button:hover {
+  background: rgba(15, 91, 70, 0.14);
+  transform: translateY(-1px);
+}
+
+.afrigo-card-hover:hover {
+  transform: translateY(-2px);
+}
+
+.afrigo-emphasis {
+  color: var(--afrigo-primary-green);
+}
+
+.afrigo-pressable {
+  will-change: transform, box-shadow;
+}
+
+.afrigo-pressable:active {
+  transform: translateY(1px) scale(0.996);
+  box-shadow: 0 6px 18px rgba(17,24,39,0.06);
+}
+
+.afrigo-focus-visible:focus {
+  outline: 3px solid rgba(30,136,229,0.12);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
