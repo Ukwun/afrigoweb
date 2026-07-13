@@ -30,12 +30,7 @@ export default function SignUpPage() {
 
       // Track successful signup
       tracker.log('auth_signup', `${firstName} ${lastName}`, email)
-      if (result.needsVerification) {
-        setStatus('success')
-        setError('Account created. Check your email and verify your address before signing in.')
-      } else {
-        router.push('/role-selection')
-      }
+      router.replace('/role-selection')
     } catch (error: any) {
       setStatus('error')
       setError(error?.message || 'Unable to create account. Please try again.')
@@ -88,22 +83,22 @@ export default function SignUpPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
                   <span className="text-sm font-medium text-[var(--afrigo-text)]">First name</span>
-                  <input value={firstName} onChange={(event) => setFirstName(event.target.value)} className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="First name" />
+                  <input required autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="First name" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[var(--afrigo-text)]">Last name</span>
-                  <input value={lastName} onChange={(event) => setLastName(event.target.value)} className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="Last name" />
+                  <input required autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="Last name" />
                 </label>
               </div>
 
               <label className="block">
                 <span className="text-sm font-medium text-[var(--afrigo-text)]">Email address</span>
-                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="you@example.com" />
+                <input required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="you@example.com" />
               </label>
 
               <label className="block">
                 <span className="text-sm font-medium text-[var(--afrigo-text)]">Password</span>
-                <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="Create a password" />
+                <input required minLength={6} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} type="password" className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="At least 6 characters" />
               </label>
 
               {error ? <p role="status" className={`rounded-xl p-3 text-sm ${status === 'success' ? 'bg-[var(--afrigo-success-light)] text-[var(--afrigo-success)]' : 'bg-[var(--afrigo-error-light)] text-[var(--afrigo-error)]'}`}>{error}</p> : null}
