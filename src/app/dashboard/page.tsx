@@ -293,8 +293,6 @@ export default function Dashboard() {
     setStatusMessage('Syncing…')
     void (async () => {
       try {
-        const activity = await authenticatedFetch('/api/analytics/activity')
-        setUpdates((activity.activities || []).map((item: any) => ({ message: item.label, ts: new Date(item.created_at).getTime() })))
         const result = await authenticatedFetch('/api/dashboard')
         if (user.role === 'Buyer') {
           setBuyerRFQs(result.rfqs.map((r: any) => ({ id:r.id,title:r.title,quantity:r.quantity,unit:r.unit,destination:r.destination_country,deadline:r.deadline||'',budget:r.budget||'',status:r.status,bidCount:result.bids.filter((b:any)=>b.rfqId===r.id).length })))
@@ -308,7 +306,18 @@ export default function Dashboard() {
           setExporterCompliance(result.compliance.map((r:any)=>({id:r.id,category:r.category,requirement:r.requirement,status:r.status,dueDate:r.dueDate||''})))
         }
         setStatusMessage('Live')
-      } catch (error: any) { setStatusMessage('Sync unavailable'); addUpdate(error.message) }
+      } catch (error: any) {
+        setStatusMessage('Data connection required')
+        addUpdate(error.message || 'Unable to load your workspace data.')
+        return
+      }
+
+      try {
+        const activity = await authenticatedFetch('/api/analytics/activity')
+        setUpdates((activity.activities || []).map((item: any) => ({ message: item.label, ts: new Date(item.created_at).getTime() })))
+      } catch {
+        addUpdate('Activity history is temporarily unavailable. Your trade data is still connected.')
+      }
     })()
   }, [isSignedIn, user?.role])
 
