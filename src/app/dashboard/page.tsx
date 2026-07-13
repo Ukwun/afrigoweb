@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
-import { isValidRole, normalizeRole, Role } from '@/lib/roles'
+import { normalizeRole, Role } from '@/lib/roles'
 import { authenticatedFetch } from '@/lib/apiClient'
 
 const MotionDiv = motion.div as any
@@ -209,7 +209,6 @@ export default function Dashboard() {
   const { user, isSignedIn, isDemo } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [displayName, setDisplayName] = useState('Guest')
-  const [demoRole, setDemoRole] = useState<Role | null>(null)
   const [updates, setUpdates] = useState<UpdateEvent[]>([])
   const [statusMessage, setStatusMessage] = useState('Live')
   const [activeActionId, setActiveActionId] = useState<string | null>(null)
@@ -242,13 +241,9 @@ export default function Dashboard() {
     { id: '1', buyerId: 'b1', buyerName: 'German Imports GmbH', product: 'Coffee Beans', quantity: 5000, deadline: '2026-07-15', status: 'New' },
     { id: '2', buyerId: 'b2', buyerName: 'Belgian Trade Co', product: 'Cocoa Butter', quantity: 2000, deadline: '2026-07-30', status: 'New' }
   ])
-  const [sellerAnalytics] = useState<SellerAnalytics>({
-    totalBids: 24,
-    winRate: 62,
-    revenueThisMonth: 125000,
-    topCustomer: 'German Imports GmbH',
-    responseTime: 2
-  })
+  const sellerAnalytics: SellerAnalytics = isDemo
+    ? { totalBids: 24, winRate: 62, revenueThisMonth: 125000, topCustomer: 'German Imports GmbH', responseTime: 2 }
+    : { totalBids: sellerRFQs.filter(item => item.status === 'Quoted').length, winRate: 0, revenueThisMonth: 0, topCustomer: 'No completed contracts yet', responseTime: 0 }
   const [sellerCreateLotForm, setSellerCreateLotForm] = useState({ product: '', quantity: '', grade: '', price: '', origin: '' })
   const [sellerQuoteForm, setSellerQuoteForm] = useState({ rfqId: '', price: '', delivery: '', terms: '' })
   const [sellerSelectedRFQ, setSellerSelectedRFQ] = useState<SellerRFQRequest | null>(null)
@@ -268,7 +263,7 @@ export default function Dashboard() {
     { id: '2', category: 'Customs', requirement: 'HS Code Declaration', status: 'Pending', dueDate: '2026-06-10' },
     { id: '3', category: 'Origin', requirement: 'Certificate of Origin', status: 'Verified', dueDate: '2026-06-30' }
   ])
-  const [exporterDocForm, setExporterDocForm] = useState({ docType: 'Invoice', file: '', shipmentId: '' })
+  const [exporterDocForm, setExporterDocForm] = useState<{ docType: string; file: File | null; shipmentId: string }>({ docType: 'Invoice', file: null, shipmentId: '' })
   const [exporterPickupForm, setExporterPickupForm] = useState({ warehouse: '', containers: '', weight: '', date: '', carrier: '' })
 
   const addUpdate = (message: string) => {
@@ -277,17 +272,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const demoEnabled = localStorage.getItem('afrigo:demo') === 'true'
-    const savedRole = localStorage.getItem('afrigo:role')
-    setMounted(true)
-
-    if (demoEnabled && isValidRole(savedRole)) {
-      setDemoRole(savedRole)
-      setDisplayName('Demo Trader')
+    if (isDemo) {
+      setDisplayName(user?.displayName || 'Preview Trader')
     } else if (isSignedIn) {
+      setBuyerRFQs([])
+      setBuyerBids([])
+      setBuyerShipments([])
+      setSellerLots([])
+      setSellerRFQs([])
+      setExporterDocs([])
+      setExporterPickups([])
+      setExporterCompliance([])
       setDisplayName(user?.displayName || 'User')
     }
-  }, [isSignedIn, user])
+    setMounted(true)
+  }, [isSignedIn, isDemo, user])
 
   useEffect(() => {
     if (!isSignedIn || !user?.role) return
@@ -305,13 +304,15 @@ export default function Dashboard() {
           setSellerRFQs(result.rfqs.map((r:any)=>({id:r.id,buyerId:r.buyerId,buyerName:r.buyerName||'Verified buyer',product:r.title,quantity:r.quantity,deadline:r.deadline||'',status:'New'})))
         } else {
           setExporterPickups(result.pickups.map((r: any) => ({ id:r.id,warehouseLocation:r.warehouse_location,containerCount:r.container_count,estimatedWeight:r.estimated_weight||'',preferredDate:r.preferred_date,carrier:r.carrier,status:r.status })))
+          setExporterDocs(result.documents.map((r:any)=>({id:r.id,type:r.type,status:r.status,shipmentId:r.shipmentId,uploadedAt:r.createdAt?new Date(r.createdAt._seconds*1000).toISOString().split('T')[0]:undefined})))
+          setExporterCompliance(result.compliance.map((r:any)=>({id:r.id,category:r.category,requirement:r.requirement,status:r.status,dueDate:r.dueDate||''})))
         }
         setStatusMessage('Live')
       } catch (error: any) { setStatusMessage('Sync unavailable'); addUpdate(error.message) }
     })()
   }, [isSignedIn, user?.role])
 
-  const displayRole = isSignedIn ? normalizeRole(user?.role) : isDemo ? demoRole : null
+  const displayRole = normalizeRole(user?.role)
   const config = displayRole ? RoleConfigs[displayRole as keyof typeof RoleConfigs] : null
 
   if (!mounted) return <div className="flex min-h-screen items-center justify-center bg-[var(--afrigo-bg)]"><p className="text-lg font-semibold text-[var(--afrigo-text)]">Loading...</p></div>
@@ -420,9 +421,23 @@ export default function Dashboard() {
   // EXPORTER MODALS & HANDLERS
   // ============================================================================
 
-  const handleExporterUploadDoc = () => {
+  const handleExporterUploadDoc = async () => {
     if (!exporterDocForm.docType || !exporterDocForm.file) return
     setActiveStep(1)
+    if (isSignedIn) {
+      try {
+        const payload = new FormData()
+        payload.set('documentType', exporterDocForm.docType)
+        payload.set('shipmentId', exporterDocForm.shipmentId)
+        payload.set('file', exporterDocForm.file)
+        const result = await authenticatedFetch('/api/documents/upload', { method: 'POST', body: payload })
+        setExporterDocs(prev => [...prev, { id: result.data.id, type: result.data.type, status: result.data.status, shipmentId: result.data.shipmentId, uploadedAt: new Date().toISOString().split('T')[0] }])
+        addUpdate(`${exporterDocForm.docType} uploaded securely`)
+        setActiveStep(2)
+        setTimeout(() => setActiveActionId(null), 900)
+      } catch (error: any) { addUpdate(error.message); setActiveStep(0) }
+      return
+    }
     setTimeout(() => {
       setActiveStep(2)
       addUpdate(`✓ ${exporterDocForm.docType} submitted for ${exporterDocForm.shipmentId}`)
@@ -911,9 +926,10 @@ export default function Dashboard() {
                             <option>Customs</option>
                           </select>
                           <input type="text" placeholder="Shipment ID" value={exporterDocForm.shipmentId} onChange={(e) => setExporterDocForm({...exporterDocForm, shipmentId: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-sm text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] mb-3" />
-                          <div className="border-2 border-dashed border-[var(--afrigo-border)] rounded-lg p-4 text-center mb-3">
-                            <p className="text-[var(--afrigo-text-secondary)] text-sm">Drag file here or click to upload</p>
-                          </div>
+                          <label className="mb-3 block cursor-pointer rounded-lg border-2 border-dashed border-[var(--afrigo-border)] p-4 text-center transition hover:border-[var(--afrigo-primary-green)]">
+                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only" onChange={event => setExporterDocForm({...exporterDocForm,file:event.target.files?.[0]||null})}/>
+                            <span className="text-sm text-[var(--afrigo-text-secondary)]">{exporterDocForm.file ? exporterDocForm.file.name : 'Choose a PDF, JPG or PNG document'}</span>
+                          </label>
                           <MotionButton whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={handleExporterUploadDoc} className="w-full rounded-lg bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-secondary-gold)] py-3 text-sm font-semibold text-white hover:opacity-90">
                             Upload & Submit
                           </MotionButton>
