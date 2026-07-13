@@ -296,15 +296,15 @@ export default function Dashboard() {
       try {
         const activity = await authenticatedFetch('/api/analytics/activity')
         setUpdates((activity.activities || []).map((item: any) => ({ message: item.label, ts: new Date(item.created_at).getTime() })))
+        const result = await authenticatedFetch('/api/dashboard')
         if (user.role === 'Buyer') {
-          const result = await authenticatedFetch('/api/trade?resource=rfqs')
-          setBuyerRFQs(result.data.map((r: any) => ({ id:r.id,title:r.title,quantity:r.quantity,unit:r.unit,destination:r.destination_country,deadline:r.deadline||'',budget:r.budget||'',status:r.status,bidCount:0 })))
+          setBuyerRFQs(result.rfqs.map((r: any) => ({ id:r.id,title:r.title,quantity:r.quantity,unit:r.unit,destination:r.destination_country,deadline:r.deadline||'',budget:r.budget||'',status:r.status,bidCount:result.bids.filter((b:any)=>b.rfqId===r.id).length })))
+          setBuyerBids(result.bids.map((b:any)=>({id:b.id,supplierId:b.supplierId,supplierName:b.supplierName||'Verified supplier',rating:b.rating||0,price:b.price,delivery:b.delivery||'',terms:typeof b.terms==='string'?b.terms:JSON.stringify(b.terms||{})})))
         } else if (user.role === 'Seller') {
-          const result = await authenticatedFetch('/api/trade?resource=lots')
-          setSellerLots(result.data.map((r: any) => ({ id:r.id,product:r.title,quantity:r.quantity,unit:r.unit,grade:r.grade||'',price:r.price||0,origin:r.origin||'',inStock:r.status==='active' })))
+          setSellerLots(result.lots.map((r: any) => ({ id:r.id,product:r.title,quantity:r.quantity,unit:r.unit,grade:r.grade||'',price:r.price||0,origin:r.origin||'',inStock:r.status==='active' })))
+          setSellerRFQs(result.rfqs.map((r:any)=>({id:r.id,buyerId:r.buyerId,buyerName:r.buyerName||'Verified buyer',product:r.title,quantity:r.quantity,deadline:r.deadline||'',status:'New'})))
         } else {
-          const result = await authenticatedFetch('/api/trade?resource=pickups')
-          setExporterPickups(result.data.map((r: any) => ({ id:r.id,warehouseLocation:r.warehouse_location,containerCount:r.container_count,estimatedWeight:r.estimated_weight||'',preferredDate:r.preferred_date,carrier:r.carrier,status:r.status })))
+          setExporterPickups(result.pickups.map((r: any) => ({ id:r.id,warehouseLocation:r.warehouse_location,containerCount:r.container_count,estimatedWeight:r.estimated_weight||'',preferredDate:r.preferred_date,carrier:r.carrier,status:r.status })))
         }
         setStatusMessage('Live')
       } catch (error: any) { setStatusMessage('Sync unavailable'); addUpdate(error.message) }
@@ -353,8 +353,13 @@ export default function Dashboard() {
     setTimeout(() => setActiveActionId(null), 3000)
   }
 
-  const handleBuyerSelectBid = (bid: BuyerBid) => {
+  const handleBuyerSelectBid = async (bid: BuyerBid) => {
     setActiveStep(1)
+    if (isSignedIn) {
+      try { await authenticatedFetch('/api/bids/award',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bidId:bid.id})});setActiveStep(2);addUpdate(`Bid awarded to ${bid.supplierName}`);setBuyerBids(prev=>prev.filter(item=>item.id!==bid.id));setTimeout(()=>setActiveActionId(null),900) }
+      catch(error:any){addUpdate(error.message);setActiveStep(0)}
+      return
+    }
     setTimeout(() => {
       setActiveStep(2)
       addUpdate(`✓ Bid awarded to ${bid.supplierName} at $${bid.price}/unit`)
@@ -394,9 +399,14 @@ export default function Dashboard() {
     setTimeout(() => setActiveActionId(null), 3000)
   }
 
-  const handleSellerSubmitQuote = () => {
+  const handleSellerSubmitQuote = async () => {
     if (!sellerSelectedRFQ || !sellerQuoteForm.price) return
     setActiveStep(1)
+    if (isSignedIn) {
+      try { await authenticatedFetch('/api/trade?resource=bids',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rfqId:sellerSelectedRFQ.id,supplierName:user?.displayName||'Verified supplier',price:Number(sellerQuoteForm.price),delivery:sellerQuoteForm.delivery,terms:sellerQuoteForm.terms,status:'Submitted'})});setActiveStep(2);addUpdate(`Quote submitted for ${sellerSelectedRFQ.product}`);setSellerRFQs(prev=>prev.map(r=>r.id===sellerSelectedRFQ.id?{...r,status:'Quoted'}:r));setSellerSelectedRFQ(null);setTimeout(()=>setActiveActionId(null),900) }
+      catch(error:any){addUpdate(error.message);setActiveStep(0)}
+      return
+    }
     setTimeout(() => {
       setActiveStep(2)
       addUpdate(`✓ Quote submitted to ${sellerSelectedRFQ.buyerName}: $${sellerQuoteForm.price}/unit`)
