@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
 import { normalizeRole, Role } from '@/lib/roles'
 import { authenticatedFetch } from '@/lib/apiClient'
+import TradeOperations from '@/components/TradeOperations'
 
 const MotionDiv = motion.div as any
 const MotionButton = motion.button as any
@@ -1072,6 +1073,8 @@ export default function Dashboard() {
           </AnimatePresence>
         </>
       )}
+
+      {!isDemo && <TradeOperations role={displayRole} />}
 
       {/* ACTIVITY FEED */}
       <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="rounded-3xl border border-[var(--afrigo-border)] bg-[var(--afrigo-surface)] p-8 shadow-xl">

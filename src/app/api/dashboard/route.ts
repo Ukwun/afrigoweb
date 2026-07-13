@@ -19,16 +19,18 @@ export async function GET(request: Request) {
         bids.push(...rows(bidSnapshot).map((bid: any) => ({ ...bid, rfqTitle: rfq.title })))
       }
       const contracts = await db.collection('contracts').where('buyerId', '==', user.id).get()
-      return Response.json({ ok: true, role, rfqs, bids, contracts: rows(contracts) })
+      const shipments = await db.collection('shipments').where('buyerId', '==', user.id).get()
+      return Response.json({ ok: true, role, rfqs, bids, contracts: rows(contracts), shipments: rows(shipments) })
     }
 
     if (role === 'Seller') {
-      const [lots, rfqs, bids] = await Promise.all([
+      const [lots, rfqs, bids, contracts] = await Promise.all([
         db.collection('lots').where('ownerId', '==', user.id).get(),
         db.collection('rfqs').where('status', '==', 'Open').limit(100).get(),
-        db.collection('bids').where('supplierId', '==', user.id).get()
+        db.collection('bids').where('supplierId', '==', user.id).get(),
+        db.collection('contracts').where('supplierId', '==', user.id).get()
       ])
-      return Response.json({ ok: true, role, lots: rows(lots), rfqs: rows(rfqs), bids: rows(bids) })
+      return Response.json({ ok: true, role, lots: rows(lots), rfqs: rows(rfqs), bids: rows(bids), contracts: rows(contracts) })
     }
 
     if (role === 'Exporter') {
@@ -38,7 +40,8 @@ export async function GET(request: Request) {
         db.collection('documents').where('ownerId', '==', user.id).get(),
         db.collection('compliance_actions').where('ownerId', '==', user.id).get()
       ])
-      return Response.json({ ok: true, role, pickups: rows(pickups), shipments: rows(shipments), documents: rows(documents), compliance: rows(compliance) })
+      const contracts = await db.collection('contracts').where('exporterId', '==', user.id).get()
+      return Response.json({ ok: true, role, pickups: rows(pickups), shipments: rows(shipments), documents: rows(documents), compliance: rows(compliance), contracts: rows(contracts) })
     }
 
     return Response.json({ ok: false, error: 'Select a role first' }, { status: 403 })
