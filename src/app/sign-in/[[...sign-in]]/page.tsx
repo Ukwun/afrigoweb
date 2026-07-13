@@ -50,6 +50,7 @@ export default function SignInPage() {
                 <span className="text-sm font-medium text-[var(--afrigo-text)]">Email address</span>
                 <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="you@example.com" />
               </label>
+              <div className="text-right"><Link href="/forgot-password" className="text-sm font-semibold text-[var(--afrigo-primary-green)] hover:underline">Forgot password?</Link></div>
 
               <label className="block">
                 <span className="text-sm font-medium text-[var(--afrigo-text)]">Password</span>

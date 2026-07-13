@@ -17,7 +17,7 @@ export default function SignUpPage() {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
   const [error, setError] = useState('')
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -26,11 +26,16 @@ export default function SignUpPage() {
     setError('')
 
     try {
-      await signUp({ firstName, lastName, email, password })
+      const result = await signUp({ firstName, lastName, email, password })
 
       // Track successful signup
       tracker.log('auth_signup', `${firstName} ${lastName}`, email)
-      router.push('/role-selection')
+      if (result.needsVerification) {
+        setStatus('success')
+        setError('Account created. Check your email and verify your address before signing in.')
+      } else {
+        router.push('/role-selection')
+      }
     } catch (error: any) {
       setStatus('error')
       setError(error?.message || 'Unable to create account. Please try again.')
@@ -101,7 +106,7 @@ export default function SignUpPage() {
                 <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className="mt-2 w-full rounded-2xl border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] outline-none transition focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" placeholder="Create a password" />
               </label>
 
-              {error ? <p className="text-sm text-[var(--afrigo-error)]">{error}</p> : null}
+              {error ? <p role="status" className={`rounded-xl p-3 text-sm ${status === 'success' ? 'bg-[var(--afrigo-success-light)] text-[var(--afrigo-success)]' : 'bg-[var(--afrigo-error-light)] text-[var(--afrigo-error)]'}`}>{error}</p> : null}
 
               <div className="space-y-4">
                 <MotionButton type="submit" whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} className="w-full rounded-full bg-gradient-to-r from-[var(--afrigo-primary-green)] to-[var(--afrigo-primary-green-hover)] px-6 py-4 text-sm font-semibold text-white shadow-lg transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70">

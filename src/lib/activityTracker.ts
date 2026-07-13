@@ -2,6 +2,7 @@
  * Activity Tracking System
  * Tracks all user interactions and stores them for analytics and real-time display
  */
+import { getSupabaseClient } from './supabaseClient'
 
 export type ActivityType = 
   | 'auth_signup'
@@ -148,10 +149,13 @@ class ActivityTracker {
    */
   private async sendToAnalytics(activity: Activity) {
     try {
-      // First attempt: send to real endpoint if available
+      const client = getSupabaseClient()
+      if (!client) return
+      const { data } = await client.auth.getSession()
+      if (!data.session) return
       const response = await fetch('/api/analytics/activity', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
         body: JSON.stringify(activity)
       })
 

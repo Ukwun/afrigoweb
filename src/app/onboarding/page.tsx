@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
 import { normalizeRole } from '@/lib/roles'
+import { getSupabaseClient } from '@/lib/supabaseClient'
 
 const stepLabels = ['Company Setup', 'KYC Documents', 'Review & Submit']
 
@@ -57,20 +58,17 @@ export default function OnboardingPage() {
       setStatus('saving')
       setNotice('Creating your onboarding profile...')
 
-      const payload = {
-        user_id: user?.id,
-        email: user?.email || '',
-        role: selectedRole,
-        display_name: user?.displayName || user?.email || 'Afrigo user',
-        company: { name: companyName, country },
-        kyc_documents: kycFiles.map((file) => ({ name: file.name, size: file.size, type: file.type }))
-      }
-
       try {
+        const { data: sessionData } = await getSupabaseClient()!.auth.getSession()
+        if (!sessionData.session) throw new Error('Your session expired. Please sign in again.')
+        const payload = new FormData()
+        payload.set('companyName', companyName)
+        payload.set('country', country)
+        kycFiles.forEach(file => payload.append('documents', file))
         const response = await fetch('/api/onboarding/complete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          body: payload
         })
 
         const json = await response.json()
@@ -222,4 +220,3 @@ export default function OnboardingPage() {
     </div>
   )
 }
-

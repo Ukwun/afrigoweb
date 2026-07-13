@@ -28,7 +28,7 @@ export async function signUp({ firstName, lastName, email, password }: { firstNa
   const client = getSupabaseClient()!
   const { data, error } = await client.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { display_name: `${firstName.trim()} ${lastName.trim()}` } } })
   if (error) throw error
-  return data.user ? fromSupabase(data.user) : null
+  return { user: data.user ? fromSupabase(data.user) : null, needsVerification: !data.session }
 }
 
 export async function signIn({ email, password }: { email: string; password: string }) {

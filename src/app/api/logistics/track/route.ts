@@ -1,0 +1,4 @@
+import { requireUser,jsonError } from '@/lib/serverAuth'
+import { rateLimit } from '@/lib/rateLimit'
+export const dynamic='force-dynamic'
+export async function GET(request:Request){try{rateLimit(request,'tracking',60);await requireUser(request);const tracking=new URL(request.url).searchParams.get('tracking'),key=process.env.DHL_API_KEY;if(!tracking)return Response.json({ok:false,error:'Tracking number is required'},{status:400});if(!key)return Response.json({ok:false,error:'Logistics provider is not configured'},{status:503});const response=await fetch(`https://api-eu.dhl.com/track/shipments?trackingNumber=${encodeURIComponent(tracking)}`,{headers:{'DHL-API-Key':key}});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Tracking request failed');return Response.json({ok:true,data})}catch(error){return jsonError(error)}}

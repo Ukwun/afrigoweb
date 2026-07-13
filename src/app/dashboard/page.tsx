@@ -1,12 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
-import { getSupabaseClient } from '@/lib/supabaseClient'
 import { isValidRole, normalizeRole, Role } from '@/lib/roles'
-import { useActivityTracker } from '@/lib/activityTracker'
+import { authenticatedFetch } from '@/lib/apiClient'
 
 const MotionDiv = motion.div as any
 const MotionButton = motion.button as any
@@ -208,7 +207,6 @@ const RoleConfigs = {
 
 export default function Dashboard() {
   const { user, isSignedIn, isDemo } = useAuth()
-  const tracker = useActivityTracker()
   const [mounted, setMounted] = useState(false)
   const [displayName, setDisplayName] = useState('Guest')
   const [demoRole, setDemoRole] = useState<Role | null>(null)
@@ -216,7 +214,6 @@ export default function Dashboard() {
   const [statusMessage, setStatusMessage] = useState('Live')
   const [activeActionId, setActiveActionId] = useState<string | null>(null)
   const [activeStep, setActiveStep] = useState(0)
-  const sourceRef = useRef<EventSource | null>(null)
 
   // Buyer State
   const [buyerRFQs, setBuyerRFQs] = useState<BuyerRFQ[]>([
@@ -278,30 +275,6 @@ export default function Dashboard() {
     setUpdates(prev => [{ message, ts: Date.now() }, ...prev].slice(0, 10))
   }
 
-  const connectStream = () => {
-    if (sourceRef.current) sourceRef.current.close()
-    const source = new EventSource('/api/dashboard/stream')
-    sourceRef.current = source
-    source.onopen = () => setStatusMessage('Live')
-    source.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        addUpdate(data.message || 'New activity')
-      } catch (err) {
-        console.error('Failed to parse event', err)
-      }
-    }
-    source.onerror = () => {
-      source.close()
-      setStatusMessage('Connecting...')
-    }
-  }
-
-  useEffect(() => {
-    connectStream()
-    return () => sourceRef.current?.close()
-  }, [])
-
   useEffect(() => {
     if (typeof window === 'undefined') return
     const demoEnabled = localStorage.getItem('afrigo:demo') === 'true'
@@ -316,6 +289,28 @@ export default function Dashboard() {
     }
   }, [isSignedIn, user])
 
+  useEffect(() => {
+    if (!isSignedIn || !user?.role) return
+    setStatusMessage('Syncing…')
+    void (async () => {
+      try {
+        const activity = await authenticatedFetch('/api/analytics/activity')
+        setUpdates((activity.activities || []).map((item: any) => ({ message: item.label, ts: new Date(item.created_at).getTime() })))
+        if (user.role === 'Buyer') {
+          const result = await authenticatedFetch('/api/trade?resource=rfqs')
+          setBuyerRFQs(result.data.map((r: any) => ({ id:r.id,title:r.title,quantity:r.quantity,unit:r.unit,destination:r.destination_country,deadline:r.deadline||'',budget:r.budget||'',status:r.status,bidCount:0 })))
+        } else if (user.role === 'Seller') {
+          const result = await authenticatedFetch('/api/trade?resource=lots')
+          setSellerLots(result.data.map((r: any) => ({ id:r.id,product:r.title,quantity:r.quantity,unit:r.unit,grade:r.grade||'',price:r.price||0,origin:r.origin||'',inStock:r.status==='active' })))
+        } else {
+          const result = await authenticatedFetch('/api/trade?resource=pickups')
+          setExporterPickups(result.data.map((r: any) => ({ id:r.id,warehouseLocation:r.warehouse_location,containerCount:r.container_count,estimatedWeight:r.estimated_weight||'',preferredDate:r.preferred_date,carrier:r.carrier,status:r.status })))
+        }
+        setStatusMessage('Live')
+      } catch (error: any) { setStatusMessage('Sync unavailable'); addUpdate(error.message) }
+    })()
+  }, [isSignedIn, user?.role])
+
   const displayRole = isSignedIn ? normalizeRole(user?.role) : isDemo ? demoRole : null
   const config = displayRole ? RoleConfigs[displayRole as keyof typeof RoleConfigs] : null
 
@@ -329,9 +324,17 @@ export default function Dashboard() {
   // BUYER MODALS & HANDLERS
   // ============================================================================
 
-  const handleBuyerCreateRFQ = () => {
+  const handleBuyerCreateRFQ = async () => {
     if (!buyerCreateRFQForm.product || !buyerCreateRFQForm.quantity) return
     setActiveStep(1)
+    if (isSignedIn) {
+      try {
+        const result = await authenticatedFetch('/api/trade?resource=rfqs', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ title:buyerCreateRFQForm.product, quantity:Number(buyerCreateRFQForm.quantity), unit:'units', destination_country:buyerCreateRFQForm.destination, budget:buyerCreateRFQForm.budget, deadline:buyerCreateRFQForm.deadline||null, status:'Open' }) })
+        setBuyerRFQs(prev => [...prev, { id:result.data.id,title:result.data.title,quantity:result.data.quantity,unit:result.data.unit,destination:result.data.destination_country,deadline:result.data.deadline||'',budget:result.data.budget||'',status:result.data.status,bidCount:0 }])
+        addUpdate(`RFQ posted: ${result.data.title}`); setActiveStep(2); setTimeout(()=>setActiveActionId(null),900)
+      } catch(error:any){addUpdate(error.message);setActiveStep(0)}
+      return
+    }
     setTimeout(() => {
       setActiveStep(2)
       addUpdate(`✓ RFQ posted: ${buyerCreateRFQForm.product} (${buyerCreateRFQForm.quantity} units)`)
@@ -364,9 +367,16 @@ export default function Dashboard() {
   // SELLER MODALS & HANDLERS
   // ============================================================================
 
-  const handleSellerCreateLot = () => {
+  const handleSellerCreateLot = async () => {
     if (!sellerCreateLotForm.product || !sellerCreateLotForm.quantity) return
     setActiveStep(1)
+    if (isSignedIn) {
+      try {
+        const result=await authenticatedFetch('/api/trade?resource=lots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:sellerCreateLotForm.product,quantity:Number(sellerCreateLotForm.quantity),unit:'kg',grade:sellerCreateLotForm.grade,price:Number(sellerCreateLotForm.price),origin:sellerCreateLotForm.origin,status:'active'})})
+        setSellerLots(prev=>[...prev,{id:result.data.id,product:result.data.title,quantity:result.data.quantity,unit:result.data.unit,grade:result.data.grade||'',price:result.data.price||0,origin:result.data.origin||'',inStock:true}]);addUpdate(`Lot added: ${result.data.title}`);setActiveStep(2);setTimeout(()=>setActiveActionId(null),900)
+      }catch(error:any){addUpdate(error.message);setActiveStep(0)}
+      return
+    }
     setTimeout(() => {
       setActiveStep(2)
       addUpdate(`✓ Lot added: ${sellerCreateLotForm.product} (${sellerCreateLotForm.quantity} kg)`)
@@ -411,9 +421,16 @@ export default function Dashboard() {
     setTimeout(() => setActiveActionId(null), 3000)
   }
 
-  const handleExporterSchedulePickup = () => {
+  const handleExporterSchedulePickup = async () => {
     if (!exporterPickupForm.warehouse || !exporterPickupForm.date) return
     setActiveStep(1)
+    if (isSignedIn) {
+      try {
+        const result=await authenticatedFetch('/api/trade?resource=pickups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({warehouse_location:exporterPickupForm.warehouse,container_count:Number(exporterPickupForm.containers),estimated_weight:exporterPickupForm.weight,preferred_date:exporterPickupForm.date,carrier:exporterPickupForm.carrier,status:'Scheduled'})})
+        setExporterPickups(prev=>[...prev,{id:result.data.id,warehouseLocation:result.data.warehouse_location,containerCount:result.data.container_count,estimatedWeight:result.data.estimated_weight||'',preferredDate:result.data.preferred_date,carrier:result.data.carrier,status:result.data.status}]);addUpdate(`Pickup scheduled for ${result.data.warehouse_location}`);setActiveStep(2);setTimeout(()=>setActiveActionId(null),900)
+      }catch(error:any){addUpdate(error.message);setActiveStep(0)}
+      return
+    }
     setTimeout(() => {
       setActiveStep(2)
       addUpdate(`✓ Pickup scheduled for ${exporterPickupForm.warehouse} on ${exporterPickupForm.date}`)
@@ -512,7 +529,7 @@ export default function Dashboard() {
                       <div className="text-center py-8">
                         <MotionDiv initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 100 }} className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-500 flex items-center justify-center text-3xl">✓</MotionDiv>
                         <p className="font-semibold text-[var(--afrigo-text)] text-lg">RFQ Posted!</p>
-                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Now visible to {Math.floor(Math.random() * 50) + 20}+ suppliers in your network</p>
+                        <p className="mt-2 text-sm text-[var(--afrigo-text-secondary)]">Published to verified suppliers in your network</p>
                       </div>
                     )}
                   </div>

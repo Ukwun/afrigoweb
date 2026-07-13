@@ -5,9 +5,3 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[context.production.environment]
-  # Placeholders — set these in Netlify UI or CLI for production
-  NEXT_PUBLIC_SUPABASE_URL = ""
-  NEXT_PUBLIC_SUPABASE_ANON_KEY = ""
-  SUPABASE_SERVICE_ROLE_KEY = ""
-  # Clerk keys removed - use local/demo auth or configure Supabase in production
