@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
 import { normalizeRole } from '@/lib/roles'
-import { getSupabaseClient } from '@/lib/supabaseClient'
+import { firebaseAuth } from '@/lib/firebaseClient'
 
 const stepLabels = ['Company Setup', 'KYC Documents', 'Review & Submit']
 
@@ -59,15 +59,15 @@ export default function OnboardingPage() {
       setNotice('Creating your onboarding profile...')
 
       try {
-        const { data: sessionData } = await getSupabaseClient()!.auth.getSession()
-        if (!sessionData.session) throw new Error('Your session expired. Please sign in again.')
+        if (!firebaseAuth?.currentUser) throw new Error('Your session expired. Please sign in again.')
+        const token = await firebaseAuth.currentUser.getIdToken()
         const payload = new FormData()
         payload.set('companyName', companyName)
         payload.set('country', country)
         kycFiles.forEach(file => payload.append('documents', file))
         const response = await fetch('/api/onboarding/complete', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          headers: { Authorization: `Bearer ${token}` },
           body: payload
         })
 

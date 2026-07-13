@@ -1,3 +1,1 @@
-import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
-export const dynamic='force-dynamic'
-export async function GET(){const started=Date.now(),admin=getSupabaseAdmin();if(!admin)return Response.json({ok:false,service:'afrigo',database:'not_configured'},{status:503});const {error}=await admin.from('users').select('id',{head:true,count:'exact'}).limit(1);return Response.json({ok:!error,service:'afrigo',database:error?'unavailable':'ready',latencyMs:Date.now()-started},{status:error?503:200})}
+import{firebaseAdmin}from'@/lib/firebaseAdmin';export const dynamic='force-dynamic';export async function GET(){const started=Date.now();try{await firebaseAdmin().db.collection('_health').limit(1).get();return Response.json({ok:true,service:'afrigo',database:'ready',latencyMs:Date.now()-started})}catch{return Response.json({ok:false,service:'afrigo',database:'not_configured'},{status:503})}}

@@ -1,23 +1,7 @@
-import { jsonError, requireUser } from '@/lib/serverAuth'
-import { rateLimit } from '@/lib/rateLimit'
-export const dynamic = 'force-dynamic'
-
-const resources = {
-  rfqs: { owner: 'buyer_id', roles: ['Buyer'] }, lots: { owner: 'owner_id', roles: ['Seller'] }, bids: { owner: 'supplier_id', roles: ['Seller'] },
-  pickups: { owner: 'exporter_id', roles: ['Exporter'] }, compliance_actions: { owner: 'owner_id', roles: ['Exporter'] },
-  shipments: { owner: 'exporter_id', roles: ['Exporter'] }, payments: { owner: 'payer_id', roles: ['Buyer'] }
-} as const
-
-function resource(url: string) { const name = new URL(url).searchParams.get('resource') as keyof typeof resources; if (!resources[name]) throw new Response(JSON.stringify({ ok:false,error:'Invalid resource' }), { status:400 }); return { name, config: resources[name] } }
-function assertRole(role: unknown, roles: readonly string[]) { if (!roles.includes(String(role))) throw new Response(JSON.stringify({ ok:false,error:'This action is not allowed for your role' }), { status:403 }) }
-
-export async function GET(request: Request) {
-  try { const { user, admin } = await requireUser(request); const { name } = resource(request.url); const { data, error } = await admin.from(name).select('*').order('created_at',{ascending:false}).limit(100); if(error) throw error; return Response.json({ok:true,data,user:{id:user.id,role:user.user_metadata?.role}}) } catch(error){ return jsonError(error) }
-}
-export async function POST(request: Request) {
-  try { rateLimit(request, 'trade-write', 30) } catch (error) { return jsonError(error) }
-  try { const { user, admin } = await requireUser(request); const { name, config } = resource(request.url); assertRole(user.user_metadata?.role, config.roles); const body=await request.json(); delete body.id; delete body.created_at; const row={...body,[config.owner]:user.id}; const {data,error}=await admin.from(name).insert(row).select().single(); if(error) throw error; await admin.from('activity_logs').insert({actor_id:user.id,type:'form_submit',label:`Created ${name}`,detail:data.id,role:user.user_metadata?.role}); return Response.json({ok:true,data},{status:201}) } catch(error){ return jsonError(error) }
-}
-export async function PATCH(request: Request) {
-  try { const { user, admin } = await requireUser(request); const { name, config }=resource(request.url); assertRole(user.user_metadata?.role,config.roles); const body=await request.json(); const id=body.id; if(!id) return Response.json({ok:false,error:'Missing id'},{status:400}); delete body.id; delete body[config.owner]; const {data,error}=await admin.from(name).update(body).eq('id',id).eq(config.owner,user.id).select().single(); if(error) throw error; return Response.json({ok:true,data}) } catch(error){ return jsonError(error) }
-}
+import {jsonError,requireUser}from'@/lib/serverAuth';import{rateLimit}from'@/lib/rateLimit';export const dynamic='force-dynamic'
+const resources={rfqs:{owner:'buyerId',roles:['Buyer']},lots:{owner:'ownerId',roles:['Seller']},bids:{owner:'supplierId',roles:['Seller']},pickups:{owner:'exporterId',roles:['Exporter']},compliance_actions:{owner:'ownerId',roles:['Exporter']},shipments:{owner:'exporterId',roles:['Exporter']},payments:{owner:'payerId',roles:['Buyer']}}as const
+function resource(url:string){const name=new URL(url).searchParams.get('resource')as keyof typeof resources;if(!resources[name])throw new Response(JSON.stringify({ok:false,error:'Invalid resource'}),{status:400});return{name,config:resources[name]}}
+function clean(data:any){const value={...data};delete value.id;delete value.createdAt;delete value.updatedAt;return value}
+export async function GET(request:Request){try{const{user,admin}=await requireUser(request),{name,config}=resource(request.url),role=user.user_metadata.role;if(!config.roles.includes(String(role)as never))throw new Response(JSON.stringify({ok:false,error:'Forbidden'}),{status:403});const snap=await admin.db.collection(name).where(config.owner,'==',user.id).orderBy('createdAt','desc').limit(100).get();return Response.json({ok:true,data:snap.docs.map(d=>({id:d.id,...d.data()}))})}catch(error){return jsonError(error)}}
+export async function POST(request:Request){try{rateLimit(request,'trade-write',30);const{user,admin}=await requireUser(request),{name,config}=resource(request.url),body=clean(await request.json());if(!config.roles.includes(String(user.user_metadata.role)as never))throw new Response(JSON.stringify({ok:false,error:'This action is not allowed for your role'}),{status:403});const ref=await admin.db.collection(name).add({...body,[config.owner]:user.id,createdAt:new Date(),updatedAt:new Date()});await admin.db.collection('activityLogs').add({actorId:user.id,type:'form_submit',label:`Created ${name}`,detail:ref.id,role:user.user_metadata.role,createdAt:new Date()});return Response.json({ok:true,data:{id:ref.id,...body}},{status:201})}catch(error){return jsonError(error)}}
+export async function PATCH(request:Request){try{rateLimit(request,'trade-write',30);const{user,admin}=await requireUser(request),{name,config}=resource(request.url),body=await request.json(),ref=admin.db.collection(name).doc(body.id),snap=await ref.get();if(!snap.exists||snap.data()?.[config.owner]!==user.id)return Response.json({ok:false,error:'Not found'},{status:404});const data=clean(body);await ref.update({...data,updatedAt:new Date()});return Response.json({ok:true,data:{id:ref.id,...data}})}catch(error){return jsonError(error)}}

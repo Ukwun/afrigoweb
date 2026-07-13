@@ -1,85 +1,16 @@
 'use client'
-
-import { useEffect, useMemo, useState } from 'react'
-import type { User } from '@supabase/supabase-js'
-import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient'
-import { isValidRole, normalizeRole, type Role } from './roles'
-
-export type AuthUser = { id: string; email: string; displayName: string; role?: Role; demo: boolean }
-const SESSION_KEY = 'afrigo:preview-session'
-
-function previewSession(): AuthUser | null {
-  if (typeof window === 'undefined') return null
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') } catch { return null }
-}
-
-function fromSupabase(user: User): AuthUser {
-  return {
-    id: user.id,
-    email: user.email || '',
-    displayName: user.user_metadata?.display_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Afrigo user',
-    role: normalizeRole(user.user_metadata?.role) || undefined,
-    demo: false
-  }
-}
-
-export async function signUp({ firstName, lastName, email, password }: { firstName: string; lastName: string; email: string; password: string }) {
-  if (!isSupabaseConfigured()) throw new Error('Account registration is not configured yet. Add the Supabase environment keys to continue.')
-  const client = getSupabaseClient()!
-  const { data, error } = await client.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { display_name: `${firstName.trim()} ${lastName.trim()}` } } })
-  if (error) throw error
-  return { user: data.user ? fromSupabase(data.user) : null, needsVerification: !data.session }
-}
-
-export async function signIn({ email, password }: { email: string; password: string }) {
-  if (!isSupabaseConfigured()) throw new Error('Sign in is not configured yet. Add the Supabase environment keys to continue.')
-  const { data, error } = await getSupabaseClient()!.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
-  if (error) throw error
-  return fromSupabase(data.user)
-}
-
-export function createDemoSession(role: string) {
-  if (!isValidRole(role)) throw new Error('Invalid preview role.')
-  const user: AuthUser = { id: `preview-${role.toLowerCase()}`, email: `preview+${role.toLowerCase()}@afrigo.local`, displayName: `${role} preview`, role, demo: true }
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user))
-  window.dispatchEvent(new Event('afrigo-auth-change'))
-  return user
-}
-
-export async function updateRole(role: string) {
-  if (!isValidRole(role)) throw new Error('Invalid role.')
-  const preview = previewSession()
-  if (preview) {
-    const updated = { ...preview, role }
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
-    window.dispatchEvent(new Event('afrigo-auth-change'))
-    return updated
-  }
-  const client = getSupabaseClient()
-  if (!client) throw new Error('Authentication is not configured.')
-  const { data, error } = await client.auth.updateUser({ data: { role } })
-  if (error) throw error
-  return fromSupabase(data.user)
-}
-
-export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    const client = getSupabaseClient()
-    const refresh = async () => {
-      const preview = previewSession()
-      if (preview) { setUser(preview); setLoading(false); return }
-      if (!client) { setUser(null); setLoading(false); return }
-      const { data } = await client.auth.getUser()
-      setUser(data.user ? fromSupabase(data.user) : null)
-      setLoading(false)
-    }
-    refresh()
-    window.addEventListener('afrigo-auth-change', refresh)
-    const subscription = client?.auth.onAuthStateChange((_event, session) => { if (!previewSession()) setUser(session?.user ? fromSupabase(session.user) : null); setLoading(false) }).data.subscription
-    return () => { window.removeEventListener('afrigo-auth-change', refresh); subscription?.unsubscribe() }
-  }, [])
-  const signOut = async () => { localStorage.removeItem(SESSION_KEY); await getSupabaseClient()?.auth.signOut(); setUser(null) }
-  return useMemo(() => ({ user, loading, isSignedIn: Boolean(user && !user.demo), isDemo: Boolean(user?.demo), setRole: updateRole, createDemo: createDemoSession, signOut, refresh: () => window.dispatchEvent(new Event('afrigo-auth-change')) }), [user, loading])
-}
+import { useEffect,useMemo,useState } from 'react'
+import { createUserWithEmailAndPassword,FacebookAuthProvider,GoogleAuthProvider,OAuthProvider,onAuthStateChanged,sendEmailVerification,signInWithEmailAndPassword,signInWithPopup,signOut as firebaseSignOut,updateProfile,type User } from 'firebase/auth'
+import { doc,getDoc,setDoc } from 'firebase/firestore'
+import { firebaseAuth,firebaseDb,isFirebaseConfigured } from './firebaseClient'
+import { isValidRole,normalizeRole,type Role } from './roles'
+export type AuthUser={id:string;email:string;displayName:string;role?:Role;demo:boolean;emailVerified?:boolean;photoURL?:string}
+const PREVIEW='afrigo:preview-session'
+const preview=()=>{if(typeof window==='undefined')return null;try{return JSON.parse(localStorage.getItem(PREVIEW)||'null')as AuthUser|null}catch{return null}}
+async function fromFirebase(user:User):Promise<AuthUser>{let role:Role|undefined;if(firebaseDb){const snap=await getDoc(doc(firebaseDb,'users',user.uid));role=normalizeRole(snap.data()?.role)||undefined}return{id:user.uid,email:user.email||'',displayName:user.displayName||user.email?.split('@')[0]||'Afrigo user',role,demo:false,emailVerified:user.emailVerified,photoURL:user.photoURL||undefined}}
+export async function signUp({firstName,lastName,email,password}:{firstName:string;lastName:string;email:string;password:string}){if(!firebaseAuth||!firebaseDb)throw new Error('Firebase Authentication is not configured.');const credential=await createUserWithEmailAndPassword(firebaseAuth,email.trim().toLowerCase(),password);const displayName=`${firstName.trim()} ${lastName.trim()}`;await updateProfile(credential.user,{displayName});await setDoc(doc(firebaseDb,'users',credential.user.uid),{email:credential.user.email,displayName,role:null,createdAt:new Date(),updatedAt:new Date()},{merge:true});await sendEmailVerification(credential.user,{url:`${location.origin}/sign-in`});return{user:await fromFirebase(credential.user),needsVerification:true}}
+export async function signIn({email,password}:{email:string;password:string}){if(!firebaseAuth)throw new Error('Firebase Authentication is not configured.');const result=await signInWithEmailAndPassword(firebaseAuth,email.trim().toLowerCase(),password);return fromFirebase(result.user)}
+export async function signInWithProvider(provider:'google'|'facebook'|'apple'){if(!firebaseAuth||!firebaseDb)throw new Error('Firebase Authentication is not configured.');const instance=provider==='google'?new GoogleAuthProvider():provider==='facebook'?new FacebookAuthProvider():new OAuthProvider('apple.com');if(provider==='apple'){(instance as OAuthProvider).addScope('email');(instance as OAuthProvider).addScope('name')}const result=await signInWithPopup(firebaseAuth,instance);await setDoc(doc(firebaseDb,'users',result.user.uid),{email:result.user.email,displayName:result.user.displayName||'Afrigo user',photoURL:result.user.photoURL||null,updatedAt:new Date()},{merge:true});return fromFirebase(result.user)}
+export function createDemoSession(role:string){if(!isValidRole(role))throw new Error('Invalid preview role.');const user:AuthUser={id:`preview-${role.toLowerCase()}`,email:`preview+${role.toLowerCase()}@afrigo.local`,displayName:`${role} preview`,role,demo:true};localStorage.setItem(PREVIEW,JSON.stringify(user));window.dispatchEvent(new Event('afrigo-auth-change'));return user}
+export async function updateRole(role:string){if(!isValidRole(role))throw new Error('Invalid role.');const p=preview();if(p){const updated={...p,role};localStorage.setItem(PREVIEW,JSON.stringify(updated));window.dispatchEvent(new Event('afrigo-auth-change'));return updated}if(!firebaseAuth?.currentUser||!firebaseDb)throw new Error('Authentication required.');await setDoc(doc(firebaseDb,'users',firebaseAuth.currentUser.uid),{role,updatedAt:new Date()},{merge:true});return fromFirebase(firebaseAuth.currentUser)}
+export function useAuth(){const[user,setUser]=useState<AuthUser|null>(null),[loading,setLoading]=useState(true);useEffect(()=>{const refresh=()=>{const p=preview();if(p){setUser(p);setLoading(false)}};refresh();window.addEventListener('afrigo-auth-change',refresh);const unsub=firebaseAuth?onAuthStateChanged(firebaseAuth,async value=>{if(!preview())setUser(value?await fromFirebase(value):null);setLoading(false)}):()=>{};if(!isFirebaseConfigured()){setLoading(false)}return()=>{window.removeEventListener('afrigo-auth-change',refresh);unsub()}},[]);const signOut=async()=>{localStorage.removeItem(PREVIEW);if(firebaseAuth)await firebaseSignOut(firebaseAuth);setUser(null)};return useMemo(()=>({user,loading,isSignedIn:Boolean(user&&!user.demo),isDemo:Boolean(user?.demo),setRole:updateRole,createDemo:createDemoSession,signOut,refresh:()=>window.dispatchEvent(new Event('afrigo-auth-change'))}),[user,loading])}

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { signIn } from '@/lib/auth'
+import { signIn, signInWithProvider } from '@/lib/auth'
 import { useActivityTracker } from '@/lib/activityTracker'
 
 const MotionDiv = motion.div as any
@@ -32,6 +32,12 @@ export default function SignInPage() {
       setError(error?.message || 'Unable to sign in. Please check your email and password.')
       tracker.log('auth_signin', 'failed', error?.message || 'Unknown error')
     }
+  }
+
+  const socialSignIn = async (provider: 'google' | 'facebook' | 'apple') => {
+    setStatus('saving'); setError('')
+    try { await signInWithProvider(provider); tracker.log('auth_signin', `${provider} sign in`); router.push('/role-selection') }
+    catch (cause: any) { setStatus('error'); setError(cause?.message || `Unable to sign in with ${provider}.`) }
   }
 
   return (
@@ -63,6 +69,11 @@ export default function SignInPage() {
                 {status === 'saving' ? 'Signing in…' : 'Sign in'}
               </MotionButton>
             </form>
+
+            <div className="my-7 flex items-center gap-3 text-xs uppercase tracking-widest text-[var(--afrigo-text-secondary)]"><span className="h-px flex-1 bg-[var(--afrigo-border)]"/>or continue with<span className="h-px flex-1 bg-[var(--afrigo-border)]"/></div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(['google','facebook','apple'] as const).map(provider=><MotionButton key={provider} type="button" whileHover={{y:-2}} whileTap={{scale:.97}} onClick={()=>socialSignIn(provider)} className="rounded-2xl border border-[var(--afrigo-border)] bg-white px-3 py-3 text-sm font-semibold capitalize text-[var(--afrigo-text)] shadow-sm hover:border-[var(--afrigo-primary-green)]">{provider==='google'?'G':provider==='facebook'?'f':'●'} {provider}</MotionButton>)}
+            </div>
 
             <div className="mt-6 text-center text-sm text-[var(--afrigo-text-secondary)]">
               <p>New to Afrigo? <Link href="/sign-up" className="font-semibold text-[var(--afrigo-primary-green)] hover:underline">Create account</Link></p>
