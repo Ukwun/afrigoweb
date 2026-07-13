@@ -75,23 +75,15 @@ export default function RoleSelectionPage() {
     setError('')
     setLoading(role)
 
-    const response = await fetch('/api/select-role', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: user.id, role })
-    })
-
-    const json = await response.json()
-    setLoading(null)
-
-    if (!response.ok || !json.ok) {
-      setError(json.error || 'Unable to save role. Please try again.')
-      return
+    try {
+      await setRole(role)
+      tracker.log('role_select', role, 'User selected trading role')
+      router.push('/dashboard')
+    } catch (cause: any) {
+      setError(cause?.message || 'Unable to save role. Please try again.')
+    } finally {
+      setLoading(null)
     }
-
-    tracker.log('role_select', role, 'User selected trading role')
-    setRole(role)
-    router.push('/dashboard')
   }
 
   const containerVariants = {

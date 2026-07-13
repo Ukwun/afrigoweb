@@ -52,8 +52,7 @@ export default function Header() {
                 whileTap={{ scale: 0.98 }}
                 className="rounded-2xl border border-[var(--afrigo-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--afrigo-text)] transition hover:bg-[var(--afrigo-bg)]"
                 onClick={() => {
-                  signOut()
-                  router.push('/')
+                  void signOut().then(() => router.push('/'))
                 }}
               >
                 Sign out

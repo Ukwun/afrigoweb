@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { createLocalAccount } from '@/lib/auth'
+import { signUp } from '@/lib/auth'
 import { useActivityTracker } from '@/lib/activityTracker'
 
 const MotionDiv = motion.div as any
@@ -26,17 +26,7 @@ export default function SignUpPage() {
     setError('')
 
     try {
-      createLocalAccount({ firstName, lastName, email, password })
-      const response = await fetch('/api/auth/sign-up', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, lastName, email, password })
-      })
-
-      if (!response.ok) {
-        const json = await response.json()
-        throw new Error(json?.error || 'Unable to create account.')
-      }
+      await signUp({ firstName, lastName, email, password })
 
       // Track successful signup
       tracker.log('auth_signup', `${firstName} ${lastName}`, email)

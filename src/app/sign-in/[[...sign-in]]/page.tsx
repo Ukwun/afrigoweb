@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { signInLocal } from '@/lib/auth'
+import { signIn } from '@/lib/auth'
 import { useActivityTracker } from '@/lib/activityTracker'
 
 const MotionDiv = motion.div as any
@@ -24,7 +24,7 @@ export default function SignInPage() {
     setError('')
 
     try {
-      signInLocal({ email, password })
+      await signIn({ email, password })
       tracker.log('auth_signin', 'User logged in', email)
       router.push('/role-selection')
     } catch (error: any) {
