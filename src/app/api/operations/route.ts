@@ -17,7 +17,8 @@ export async function POST(request: Request) {
     else if (action === 'milestone' && isSeller && ['accepted', 'paid', 'fulfilling'].includes(data?.status)) await contractRef.update({ status: 'fulfilling', fulfilmentMilestone: String(input.milestone || '').slice(0, 120), updatedAt: now })
     else if (action === 'assign-exporter' && isBuyer && data?.status === 'paid') {
       const exporterId = String(input.exporterId || ''), exporter = await db.collection('users').doc(exporterId).get()
-      if (!exporter.exists || exporter.data()?.role !== 'Exporter') return Response.json({ ok: false, error: 'Verified Exporter not found' }, { status: 404 })
+      const companyId=exporter.data()?.companyId,company=companyId?await db.collection('companies').doc(companyId).get():null
+      if (!exporter.exists || exporter.data()?.role !== 'Exporter' || (exporter.data()?.kycStatus!=='verified' && exporter.data()?.verificationStatus!=='verified' && company?.data()?.kycStatus!=='verified')) return Response.json({ ok: false, error: 'Verified Exporter not found' }, { status: 404 })
       const shipment = db.collection('shipments').doc()
       await db.runTransaction(async transaction => { transaction.update(contractRef, { exporterId, status: 'shipping', updatedAt: now }); transaction.set(shipment, { contractId: contract.id, buyerId: data.buyerId, supplierId: data.supplierId, exporterId, status: 'Assigned', progress: 5, createdAt: now, updatedAt: now }) })
     } else if (action === 'message') {

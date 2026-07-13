@@ -17,7 +17,12 @@ export async function POST(request: Request) {
       if (rfq.data()?.status !== 'Open') throw new Error('This RFQ has already been closed')
       const price = Number(bidData.price), quantity = Number(rfq.data()?.quantity)
       if (!Number.isFinite(price) || !Number.isFinite(quantity) || price <= 0 || quantity <= 0) throw new Error('Bid or RFQ amount is invalid')
-      transaction.set(contractRef, { rfqId: rfq.id, buyerId: user.id, supplierId: bidData.supplierId, amount: price * quantity, currency: bidData.currency || 'USD', status: 'pending', createdAt: new Date(), updatedAt: new Date() })
+      if (!bidData.lotId) throw new Error('This legacy bid is not linked to inventory and cannot be awarded')
+      const lotRef = db.collection('lots').doc(bidData.lotId), lot = await transaction.get(lotRef)
+      if (!lot.exists || lot.data()?.ownerId !== bidData.supplierId || lot.data()?.status !== 'active' || Number(lot.data()?.quantity) < quantity) throw new Error('The inventory lot is no longer available')
+      const remaining = Number(lot.data()?.quantity) - quantity
+      transaction.set(contractRef, { rfqId: rfq.id, bidId: bid.id, inventoryLotId: lot.id, quantity, buyerId: user.id, supplierId: bidData.supplierId, amount: price * quantity, currency: bidData.currency || 'USD', status: 'pending', paymentStatus: 'not_started', payoutStatus: 'pending', createdAt: new Date(), updatedAt: new Date() })
+      transaction.update(lotRef, { quantity: remaining, status: remaining === 0 ? 'archived' : 'active', reservedForContractId: contractRef.id, updatedAt: new Date() })
       transaction.update(bidRef, { status: 'Awarded', updatedAt: new Date() })
       transaction.update(rfqRef, { status: 'Awarded', awardedBidId: bid.id, updatedAt: new Date() })
     })

@@ -47,13 +47,16 @@ export async function POST(request: Request) {
       if (!title || !quantity || !price) return Response.json({ ok: false, error: 'Product, quantity and price are required' }, { status: 400 })
       data = { title, quantity, price, unit: text(input.unit, 24) || 'kg', grade: text(input.grade, 80), origin: text(input.origin, 80), description: text(input.description, 1200), status: 'active' }
     } else if (name === 'bids') {
-      const rfqId = text(input.rfqId, 128), price = positive(input.price)
-      if (!rfqId || !price) return Response.json({ ok: false, error: 'RFQ and price are required' }, { status: 400 })
+      const rfqId = text(input.rfqId, 128), lotId = text(input.lotId, 128), price = positive(input.price)
+      if (!rfqId || !lotId || !price) return Response.json({ ok: false, error: 'RFQ, inventory lot and price are required' }, { status: 400 })
       const rfq = await admin.db.collection('rfqs').doc(rfqId).get()
       if (!rfq.exists || rfq.data()?.status !== 'Open') return Response.json({ ok: false, error: 'This RFQ is no longer open' }, { status: 409 })
+      const lot = await admin.db.collection('lots').doc(lotId).get()
+      if (!lot.exists || lot.data()?.ownerId !== user.id || lot.data()?.status !== 'active') return Response.json({ ok: false, error: 'Select one of your active inventory lots' }, { status: 400 })
+      if (Number(lot.data()?.quantity) < Number(rfq.data()?.quantity)) return Response.json({ ok: false, error: 'The selected lot does not have enough available inventory' }, { status: 409 })
       const existing = await admin.db.collection('bids').where('rfqId', '==', rfqId).where('supplierId', '==', user.id).limit(1).get()
       if (!existing.empty) return Response.json({ ok: false, error: 'You already submitted a bid for this RFQ' }, { status: 409 })
-      data = { rfqId, price, currency: text(input.currency, 8) || 'USD', delivery: text(input.delivery, 120), terms: text(input.terms, 1000), supplierName: profile?.displayName || user.email, status: 'Submitted' }
+      data = { rfqId, lotId, reservedQuantity: Number(rfq.data()?.quantity), price, currency: text(input.currency, 8) || 'USD', delivery: text(input.delivery, 120), terms: text(input.terms, 1000), supplierName: profile?.displayName || user.email, status: 'Submitted' }
     } else if (name === 'pickups') {
       const warehouse = text(input.warehouse_location, 180), containers = positive(input.container_count), date = text(input.preferred_date, 20)
       if (!warehouse || !containers || !date) return Response.json({ ok: false, error: 'Warehouse, container count and date are required' }, { status: 400 })

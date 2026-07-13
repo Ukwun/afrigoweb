@@ -246,7 +246,7 @@ export default function Dashboard() {
     ? { totalBids: 24, winRate: 62, revenueThisMonth: 125000, topCustomer: 'German Imports GmbH', responseTime: 2 }
     : { totalBids: sellerRFQs.filter(item => item.status === 'Quoted').length, winRate: 0, revenueThisMonth: 0, topCustomer: 'No completed contracts yet', responseTime: 0 }
   const [sellerCreateLotForm, setSellerCreateLotForm] = useState({ product: '', quantity: '', grade: '', price: '', origin: '' })
-  const [sellerQuoteForm, setSellerQuoteForm] = useState({ rfqId: '', price: '', delivery: '', terms: '' })
+  const [sellerQuoteForm, setSellerQuoteForm] = useState({ rfqId: '', lotId: '', price: '', delivery: '', terms: '' })
   const [sellerSelectedRFQ, setSellerSelectedRFQ] = useState<SellerRFQRequest | null>(null)
 
   // Exporter State
@@ -411,10 +411,10 @@ export default function Dashboard() {
   }
 
   const handleSellerSubmitQuote = async () => {
-    if (!sellerSelectedRFQ || !sellerQuoteForm.price) return
+    if (!sellerSelectedRFQ || !sellerQuoteForm.price || !sellerQuoteForm.lotId) { addUpdate('Select an inventory lot with enough available stock.'); return }
     setActiveStep(1)
     if (isSignedIn) {
-      try { await authenticatedFetch('/api/trade?resource=bids',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rfqId:sellerSelectedRFQ.id,supplierName:user?.displayName||'Verified supplier',price:Number(sellerQuoteForm.price),delivery:sellerQuoteForm.delivery,terms:sellerQuoteForm.terms,status:'Submitted'})});setActiveStep(2);addUpdate(`Quote submitted for ${sellerSelectedRFQ.product}`);setSellerRFQs(prev=>prev.map(r=>r.id===sellerSelectedRFQ.id?{...r,status:'Quoted'}:r));setSellerSelectedRFQ(null);setTimeout(()=>setActiveActionId(null),900) }
+      try { await authenticatedFetch('/api/trade?resource=bids',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rfqId:sellerSelectedRFQ.id,lotId:sellerQuoteForm.lotId,supplierName:user?.displayName||'Verified supplier',price:Number(sellerQuoteForm.price),delivery:sellerQuoteForm.delivery,terms:sellerQuoteForm.terms,status:'Submitted'})});setActiveStep(2);addUpdate(`Quote submitted for ${sellerSelectedRFQ.product}`);setSellerRFQs(prev=>prev.map(r=>r.id===sellerSelectedRFQ.id?{...r,status:'Quoted'}:r));setSellerSelectedRFQ(null);setTimeout(()=>setActiveActionId(null),900) }
       catch(error:any){addUpdate(error.message);setActiveStep(0)}
       return
     }
@@ -722,6 +722,11 @@ export default function Dashboard() {
                               <p className="text-sm text-[var(--afrigo-text-secondary)] mt-1">Qty: {sellerSelectedRFQ.quantity} units • Deadline: {sellerSelectedRFQ.deadline}</p>
                             </div>
                             <div>
+                              <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Inventory lot</label>
+                              <select value={sellerQuoteForm.lotId} onChange={(e) => setSellerQuoteForm({...sellerQuoteForm, lotId: e.target.value})} className="mb-4 w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)]">
+                                <option value="">Select available stock</option>
+                                {sellerLots.filter(lot=>lot.inStock && lot.quantity >= (sellerSelectedRFQ?.quantity||0)).map(lot=><option key={lot.id} value={lot.id}>{lot.product} - {lot.quantity.toLocaleString()} {lot.unit}</option>)}
+                              </select>
                               <label className="block text-sm font-semibold text-[var(--afrigo-text)] mb-2">Your Quote (per unit)</label>
                               <input type="number" placeholder="$25.00" value={sellerQuoteForm.price} onChange={(e) => setSellerQuoteForm({...sellerQuoteForm, price: e.target.value})} className="w-full rounded-lg border border-[var(--afrigo-border)] bg-[var(--afrigo-bg)] px-4 py-3 text-[var(--afrigo-text)] focus:outline-none focus:border-[var(--afrigo-primary-green)] focus:ring-2 focus:ring-[var(--afrigo-primary-green)]/20" />
                             </div>

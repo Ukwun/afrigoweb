@@ -2,7 +2,15 @@ rules_version = '2';
 service cloud.firestore { match /databases/{database}/documents {
   function signedIn(){ return request.auth != null; }
   function owner(field){ return signedIn() && resource.data[field] == request.auth.uid; }
-  match /users/{uid} { allow read, create, update: if signedIn() && request.auth.uid == uid; }
+  match /users/{uid} {
+    allow read: if signedIn() && request.auth.uid == uid;
+    allow create: if signedIn() && request.auth.uid == uid && !request.resource.data.keys().hasAny(['systemRole','settlement','kycStatus','verificationStatus']);
+    allow update: if signedIn() && request.auth.uid == uid
+      && request.resource.data.systemRole == resource.data.systemRole
+      && request.resource.data.settlement == resource.data.settlement
+      && request.resource.data.kycStatus == resource.data.kycStatus
+      && request.resource.data.verificationStatus == resource.data.verificationStatus;
+  }
   match /companies/{id} { allow read,write: if owner('ownerId'); }
   match /rfqs/{id} { allow read,write: if owner('buyerId'); }
   match /lots/{id} { allow read,write: if owner('ownerId'); }
@@ -14,4 +22,7 @@ service cloud.firestore { match /databases/{database}/documents {
   match /documents/{id} { allow read: if owner('ownerId'); allow write: if false; }
   match /activityLogs/{id} { allow read: if owner('actorId'); allow write: if false; }
   match /integrationEvents/{id} { allow read,write: if false; }
+  match /contracts/{id} { allow read,write: if false; }
+  match /messages/{id} { allow read,write: if false; }
+  match /payouts/{id} { allow read,write: if false; }
 }}

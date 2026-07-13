@@ -20,7 +20,10 @@ export async function GET(request: Request) {
       }
       const contracts = await db.collection('contracts').where('buyerId', '==', user.id).get()
       const shipments = await db.collection('shipments').where('buyerId', '==', user.id).get()
-      return Response.json({ ok: true, role, rfqs, bids, contracts: rows(contracts), shipments: rows(shipments) })
+      const exportersSnapshot = await db.collection('users').where('role', '==', 'Exporter').limit(100).get()
+      const exporters:any[]=[]
+      for(const item of rows(exportersSnapshot) as any[]){const company=item.companyId?await db.collection('companies').doc(item.companyId).get():null;if(item.kycStatus==='verified'||item.verificationStatus==='verified'||company?.data()?.kycStatus==='verified')exporters.push({id:item.id,displayName:item.displayName||company?.data()?.name||'Verified Exporter',country:item.country||company?.data()?.country||''})}
+      return Response.json({ ok: true, role, rfqs, bids, contracts: rows(contracts), shipments: rows(shipments), exporters })
     }
 
     if (role === 'Seller') {
@@ -30,7 +33,13 @@ export async function GET(request: Request) {
         db.collection('bids').where('supplierId', '==', user.id).get(),
         db.collection('contracts').where('supplierId', '==', user.id).get()
       ])
-      return Response.json({ ok: true, role, lots: rows(lots), rfqs: rows(rfqs), bids: rows(bids), contracts: rows(contracts) })
+      const bidRows:any[] = rows(bids), contractRows:any[] = rows(contracts)
+      const completed = contractRows.filter(item => item.status === 'completed' && item.paymentStatus === 'paid')
+      const won = bidRows.filter(item => item.status === 'Awarded').length
+      const payouts = await db.collection('payouts').where('sellerId', '==', user.id).get()
+      const payoutRows:any[] = rows(payouts)
+      const metrics = { totalBids:bidRows.length, winRate:bidRows.length ? Math.round((won/bidRows.length)*100) : 0, revenue:completed.reduce((sum,item)=>sum+Number(item.amount||0),0), completedContracts:completed.length, paidOut:payoutRows.filter(item=>item.status==='success').reduce((sum,item)=>sum+Number(item.amount||0),0) }
+      return Response.json({ ok: true, role, lots: rows(lots), rfqs: rows(rfqs), bids: bidRows, contracts: contractRows, payouts:payoutRows, metrics })
     }
 
     if (role === 'Exporter') {

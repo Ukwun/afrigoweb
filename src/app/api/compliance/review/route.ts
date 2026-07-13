@@ -1,0 +1,4 @@
+import { jsonError } from '@/lib/serverAuth'
+import { requireStaff } from '@/lib/staffAuth'
+
+export async function POST(request:Request){try{const {user,admin}=await requireStaff(request),input=await request.json(),kind=input.kind==='document'?'documents':'compliance_actions',status=input.decision==='approve'?(kind==='documents'?'Approved':'Verified'):'Rejected',ref=admin.db.collection(kind).doc(String(input.id||'')),record=await ref.get();if(!record.exists)return Response.json({ok:false,error:'Review item not found'},{status:404});await ref.update({status,reviewReason:String(input.reason||'').slice(0,1000),reviewedBy:user.id,reviewedAt:new Date(),updatedAt:new Date()});await admin.db.collection('activityLogs').add({actorId:user.id,type:'compliance_review',label:`${status} ${kind}`,detail:ref.id,role:'Staff',createdAt:new Date()});return Response.json({ok:true,status})}catch(error){return jsonError(error)}}
