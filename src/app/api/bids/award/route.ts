@@ -1,2 +1,28 @@
-import{jsonError,requireUser}from'@/lib/serverAuth';import{rateLimit}from'@/lib/rateLimit'
-export async function POST(request:Request){try{rateLimit(request,'bid-award',10);const{user,admin}=await requireUser(request),{bidId}=await request.json(),db=admin.db,bidRef=db.collection('bids').doc(String(bidId)),bid=await bidRef.get();if(!bid.exists)return Response.json({ok:false,error:'Bid not found'},{status:404});const data=bid.data()!,rfqRef=db.collection('rfqs').doc(data.rfqId),rfq=await rfqRef.get();if(!rfq.exists||rfq.data()?.buyerId!==user.id)return Response.json({ok:false,error:'You cannot award this bid'},{status:403});const contractRef=db.collection('contracts').doc();await db.runTransaction(async transaction=>{transaction.set(contractRef,{rfqId:rfq.id,buyerId:user.id,supplierId:data.supplierId,amount:Number(data.price)*Number(rfq.data()?.quantity||1),currency:data.currency||'USD',status:'pending',createdAt:new Date(),updatedAt:new Date()});transaction.update(bidRef,{status:'Awarded',updatedAt:new Date()});transaction.update(rfqRef,{status:'Awarded',awardedBidId:bid.id,updatedAt:new Date()})});await db.collection('activityLogs').add({actorId:user.id,type:'form_submit',label:'Awarded supplier bid',detail:bid.id,role:'Buyer',createdAt:new Date()});return Response.json({ok:true,contractId:contractRef.id})}catch(error){return jsonError(error)}}
+import { jsonError, requireUser } from '@/lib/serverAuth'
+import { rateLimit } from '@/lib/rateLimit'
+
+export async function POST(request: Request) {
+  try {
+    rateLimit(request, 'bid-award', 10)
+    const { user, admin } = await requireUser(request)
+    if (user.user_metadata.role !== 'Buyer') return Response.json({ ok: false, error: 'Buyer role required' }, { status: 403 })
+    const { bidId } = await request.json()
+    const db = admin.db, bidRef = db.collection('bids').doc(String(bidId || '')), contractRef = db.collection('contracts').doc()
+
+    await db.runTransaction(async transaction => {
+      const bid = await transaction.get(bidRef)
+      if (!bid.exists || bid.data()?.status !== 'Submitted') throw new Error('This bid is no longer available')
+      const bidData = bid.data()!, rfqRef = db.collection('rfqs').doc(bidData.rfqId), rfq = await transaction.get(rfqRef)
+      if (!rfq.exists || rfq.data()?.buyerId !== user.id) throw new Error('You cannot award this bid')
+      if (rfq.data()?.status !== 'Open') throw new Error('This RFQ has already been closed')
+      const price = Number(bidData.price), quantity = Number(rfq.data()?.quantity)
+      if (!Number.isFinite(price) || !Number.isFinite(quantity) || price <= 0 || quantity <= 0) throw new Error('Bid or RFQ amount is invalid')
+      transaction.set(contractRef, { rfqId: rfq.id, buyerId: user.id, supplierId: bidData.supplierId, amount: price * quantity, currency: bidData.currency || 'USD', status: 'pending', createdAt: new Date(), updatedAt: new Date() })
+      transaction.update(bidRef, { status: 'Awarded', updatedAt: new Date() })
+      transaction.update(rfqRef, { status: 'Awarded', awardedBidId: bid.id, updatedAt: new Date() })
+    })
+
+    await db.collection('activityLogs').add({ actorId: user.id, type: 'form_submit', label: 'Awarded supplier bid', detail: String(bidId), role: 'Buyer', createdAt: new Date() })
+    return Response.json({ ok: true, contractId: contractRef.id })
+  } catch (error) { return jsonError(error) }
+}

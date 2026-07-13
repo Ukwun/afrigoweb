@@ -1,7 +1,86 @@
-import {jsonError,requireUser}from'@/lib/serverAuth';import{rateLimit}from'@/lib/rateLimit';export const dynamic='force-dynamic'
-const resources={rfqs:{owner:'buyerId',roles:['Buyer']},lots:{owner:'ownerId',roles:['Seller']},bids:{owner:'supplierId',roles:['Seller']},contracts:{owner:'buyerId',roles:['Buyer']},pickups:{owner:'exporterId',roles:['Exporter']},compliance_actions:{owner:'ownerId',roles:['Exporter']},shipments:{owner:'exporterId',roles:['Exporter']},payments:{owner:'payerId',roles:['Buyer']}}as const
-function resource(url:string){const name=new URL(url).searchParams.get('resource')as keyof typeof resources;if(!resources[name])throw new Response(JSON.stringify({ok:false,error:'Invalid resource'}),{status:400});return{name,config:resources[name]}}
-function clean(data:any){const value={...data};delete value.id;delete value.createdAt;delete value.updatedAt;return value}
-export async function GET(request:Request){try{const{user,admin}=await requireUser(request),{name,config}=resource(request.url),role=user.user_metadata.role;if(!config.roles.includes(String(role)as never))throw new Response(JSON.stringify({ok:false,error:'Forbidden'}),{status:403});const snap=await admin.db.collection(name).where(config.owner,'==',user.id).orderBy('createdAt','desc').limit(100).get();return Response.json({ok:true,data:snap.docs.map(d=>({id:d.id,...d.data()}))})}catch(error){return jsonError(error)}}
-export async function POST(request:Request){try{rateLimit(request,'trade-write',30);const{user,admin}=await requireUser(request),{name,config}=resource(request.url),body=clean(await request.json());if(!config.roles.includes(String(user.user_metadata.role)as never))throw new Response(JSON.stringify({ok:false,error:'This action is not allowed for your role'}),{status:403});const ref=await admin.db.collection(name).add({...body,[config.owner]:user.id,createdAt:new Date(),updatedAt:new Date()});await admin.db.collection('activityLogs').add({actorId:user.id,type:'form_submit',label:`Created ${name}`,detail:ref.id,role:user.user_metadata.role,createdAt:new Date()});return Response.json({ok:true,data:{id:ref.id,...body}},{status:201})}catch(error){return jsonError(error)}}
-export async function PATCH(request:Request){try{rateLimit(request,'trade-write',30);const{user,admin}=await requireUser(request),{name,config}=resource(request.url),body=await request.json(),ref=admin.db.collection(name).doc(body.id),snap=await ref.get();if(!snap.exists||snap.data()?.[config.owner]!==user.id)return Response.json({ok:false,error:'Not found'},{status:404});const data=clean(body);await ref.update({...data,updatedAt:new Date()});return Response.json({ok:true,data:{id:ref.id,...data}})}catch(error){return jsonError(error)}}
+import { jsonError, requireUser } from '@/lib/serverAuth'
+import { rateLimit } from '@/lib/rateLimit'
+
+export const dynamic = 'force-dynamic'
+const resources = {
+  rfqs: { owner: 'buyerId', role: 'Buyer' },
+  lots: { owner: 'ownerId', role: 'Seller' },
+  bids: { owner: 'supplierId', role: 'Seller' },
+  pickups: { owner: 'exporterId', role: 'Exporter' },
+  compliance_actions: { owner: 'ownerId', role: 'Exporter' }
+} as const
+type Resource = keyof typeof resources
+
+function getResource(url: string) {
+  const name = new URL(url).searchParams.get('resource') as Resource
+  if (!resources[name]) throw new Response(JSON.stringify({ ok: false, error: 'Invalid resource' }), { status: 400, headers: { 'content-type': 'application/json' } })
+  return { name, config: resources[name] }
+}
+const text = (value: unknown, max = 240) => String(value || '').trim().slice(0, max)
+const positive = (value: unknown) => { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null }
+
+export async function GET(request: Request) {
+  try {
+    const { user, admin } = await requireUser(request)
+    const { name, config } = getResource(request.url)
+    if (user.user_metadata.role !== config.role) return Response.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    const snapshot = await admin.db.collection(name).where(config.owner, '==', user.id).limit(100).get()
+    return Response.json({ ok: true, data: snapshot.docs.map(document => ({ id: document.id, ...document.data() })) })
+  } catch (error) { return jsonError(error) }
+}
+
+export async function POST(request: Request) {
+  try {
+    rateLimit(request, 'trade-write', 30)
+    const { user, admin, profile } = await requireUser(request)
+    const { name, config } = getResource(request.url)
+    if (user.user_metadata.role !== config.role) return Response.json({ ok: false, error: 'This action is not allowed for your role' }, { status: 403 })
+    const input = await request.json()
+    let data: Record<string, unknown>
+
+    if (name === 'rfqs') {
+      const title = text(input.title, 120), quantity = positive(input.quantity), destination = text(input.destination_country, 80)
+      if (!title || !quantity || !destination) return Response.json({ ok: false, error: 'Product, quantity and destination are required' }, { status: 400 })
+      data = { title, quantity, unit: text(input.unit, 24) || 'units', destination_country: destination, budget: text(input.budget, 80), deadline: text(input.deadline, 20) || null, description: text(input.description, 1200), buyerName: profile?.displayName || user.email, status: 'Open' }
+    } else if (name === 'lots') {
+      const title = text(input.title, 120), quantity = positive(input.quantity), price = positive(input.price)
+      if (!title || !quantity || !price) return Response.json({ ok: false, error: 'Product, quantity and price are required' }, { status: 400 })
+      data = { title, quantity, price, unit: text(input.unit, 24) || 'kg', grade: text(input.grade, 80), origin: text(input.origin, 80), description: text(input.description, 1200), status: 'active' }
+    } else if (name === 'bids') {
+      const rfqId = text(input.rfqId, 128), price = positive(input.price)
+      if (!rfqId || !price) return Response.json({ ok: false, error: 'RFQ and price are required' }, { status: 400 })
+      const rfq = await admin.db.collection('rfqs').doc(rfqId).get()
+      if (!rfq.exists || rfq.data()?.status !== 'Open') return Response.json({ ok: false, error: 'This RFQ is no longer open' }, { status: 409 })
+      const existing = await admin.db.collection('bids').where('rfqId', '==', rfqId).where('supplierId', '==', user.id).limit(1).get()
+      if (!existing.empty) return Response.json({ ok: false, error: 'You already submitted a bid for this RFQ' }, { status: 409 })
+      data = { rfqId, price, currency: text(input.currency, 8) || 'USD', delivery: text(input.delivery, 120), terms: text(input.terms, 1000), supplierName: profile?.displayName || user.email, status: 'Submitted' }
+    } else if (name === 'pickups') {
+      const warehouse = text(input.warehouse_location, 180), containers = positive(input.container_count), date = text(input.preferred_date, 20)
+      if (!warehouse || !containers || !date) return Response.json({ ok: false, error: 'Warehouse, container count and date are required' }, { status: 400 })
+      data = { warehouse_location: warehouse, container_count: Math.floor(containers), estimated_weight: text(input.estimated_weight, 80), preferred_date: date, carrier: text(input.carrier, 120), status: 'Scheduled' }
+    } else {
+      const category = text(input.category, 120), requirement = text(input.requirement, 300)
+      if (!category || !requirement) return Response.json({ ok: false, error: 'Category and requirement are required' }, { status: 400 })
+      data = { category, requirement, dueDate: text(input.dueDate, 20) || null, status: 'Pending' }
+    }
+
+    const reference = await admin.db.collection(name).add({ ...data, [config.owner]: user.id, createdAt: new Date(), updatedAt: new Date() })
+    await admin.db.collection('activityLogs').add({ actorId: user.id, type: 'form_submit', label: `Created ${name}`, detail: reference.id, role: user.user_metadata.role, createdAt: new Date() })
+    return Response.json({ ok: true, data: { id: reference.id, ...data } }, { status: 201 })
+  } catch (error) { return jsonError(error) }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    rateLimit(request, 'trade-write', 30)
+    const { user, admin } = await requireUser(request)
+    const { name, config } = getResource(request.url)
+    if (user.user_metadata.role !== config.role) return Response.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    const input = await request.json(), reference = admin.db.collection(name).doc(text(input.id, 128)), snapshot = await reference.get()
+    if (!snapshot.exists || snapshot.data()?.[config.owner] !== user.id) return Response.json({ ok: false, error: 'Not found' }, { status: 404 })
+    const allowed: Record<Resource, string[]> = { rfqs: ['description', 'deadline', 'budget'], lots: ['quantity', 'price', 'grade', 'description', 'status'], bids: ['delivery', 'terms'], pickups: ['preferred_date', 'carrier'], compliance_actions: ['status', 'dueDate'] }
+    const updates = Object.fromEntries(allowed[name].filter(key => input[key] !== undefined).map(key => [key, typeof input[key] === 'string' ? text(input[key], 1200) : input[key]]))
+    await reference.update({ ...updates, updatedAt: new Date() })
+    return Response.json({ ok: true, data: { id: reference.id, ...updates } })
+  } catch (error) { return jsonError(error) }
+}
