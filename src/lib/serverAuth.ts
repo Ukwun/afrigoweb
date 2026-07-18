@@ -17,7 +17,7 @@ export async function requireUser(request: Request) {
   try {
     const decoded = await admin.auth.verifyIdToken(token, true)
     const profile = (await admin.db.collection('users').doc(decoded.uid).get()).data()
-    return { user: { id: decoded.uid, uid: decoded.uid, email: decoded.email || '', user_metadata: { role: profile?.role, display_name: profile?.displayName } }, admin, profile }
+    return { user: { id: decoded.uid, uid: decoded.uid, email: decoded.email || '', emailVerified: Boolean(decoded.email_verified), claims: decoded, user_metadata: { role: profile?.role, display_name: profile?.displayName } }, admin, profile }
   } catch {
     throw jsonResponse('Your session expired. Sign in again.', 401)
   }

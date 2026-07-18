@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { useAuth } from '@/lib/auth'
+import { requestEmailVerification, useAuth } from '@/lib/auth'
 import { isValidRole } from '@/lib/roles'
 import { useActivityTracker } from '@/lib/activityTracker'
 
@@ -38,6 +38,7 @@ export default function RoleSelectionPage() {
   const { user, isSignedIn, isDemo, createDemo, setRole } = useAuth()
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [verificationSent,setVerificationSent]=useState(false)
 
   const currentRole = user?.role || ''
 
@@ -168,6 +169,7 @@ export default function RoleSelectionPage() {
           </>
         ) : (
           <div className="space-y-10">
+            {!user?.emailVerified&&<MotionDiv initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} className="mx-auto max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center"><p className="font-bold text-amber-900">Email verification is optional for trading, but required for staff access.</p><p className="mt-1 text-sm text-amber-800">Company staff should verify this account before the owner assigns an operational role.</p><button disabled={verificationSent} onClick={async()=>{try{await requestEmailVerification();setVerificationSent(true)}catch(cause:any){setError(cause.message)}}} className="mt-3 rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{verificationSent?'Verification email sent':'Verify company email'}</button></MotionDiv>}
             {currentRole && (
               <MotionDiv
                 initial={{ opacity: 0 }}
@@ -229,12 +231,12 @@ export default function RoleSelectionPage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => selectRole(role.name)}
-                      disabled={!!loading}
+                      disabled={!!loading||Boolean(currentRole&&currentRole!==role.name)}
                       className={`w-full rounded-2xl py-3 font-semibold transition ${loading === role.name
                         ? 'cursor-wait bg-[var(--afrigo-text-secondary)] text-white opacity-70'
                         : currentRole === role.name
                         ? 'border-2 border-[var(--afrigo-primary-green)] bg-transparent text-[var(--afrigo-primary-green)]'
-                        : 'bg-[var(--afrigo-primary-green)] text-white hover:bg-[var(--afrigo-primary-green-hover)]'}`}
+                        : currentRole ? 'cursor-not-allowed bg-slate-200 text-slate-500' : 'bg-[var(--afrigo-primary-green)] text-white hover:bg-[var(--afrigo-primary-green-hover)]'}`}
                     >
                       {loading === role.name ? 'Saving...' : currentRole === role.name ? 'Selected' : 'Choose role'}
                     </MotionButton>
