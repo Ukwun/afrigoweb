@@ -8,13 +8,13 @@ service cloud.firestore { match /databases/{database}/documents {
     allow update: if signedIn() && request.auth.uid == uid
       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email','displayName','photoURL','updatedAt']);
   }
-  match /companies/{id} { allow read,write: if owner('ownerId'); }
-  match /rfqs/{id} { allow read,write: if owner('buyerId'); }
-  match /lots/{id} { allow read,write: if owner('ownerId'); }
-  match /bids/{id} { allow read,write: if owner('supplierId'); }
-  match /pickups/{id} { allow read,write: if owner('exporterId'); }
-  match /shipments/{id} { allow read,write: if owner('exporterId'); }
-  match /compliance_actions/{id} { allow read,write: if owner('ownerId'); }
+  match /companies/{id} { allow read: if owner('ownerId'); allow write: if false; }
+  match /rfqs/{id} { allow read: if owner('buyerId'); allow write: if false; }
+  match /lots/{id} { allow read: if owner('ownerId'); allow write: if false; }
+  match /bids/{id} { allow read: if owner('supplierId'); allow write: if false; }
+  match /pickups/{id} { allow read: if owner('exporterId'); allow write: if false; }
+  match /shipments/{id} { allow read: if owner('exporterId'); allow write: if false; }
+  match /compliance_actions/{id} { allow read: if owner('ownerId'); allow write: if false; }
   match /payments/{id} { allow read: if owner('payerId'); allow write: if false; }
   match /documents/{id} { allow read: if owner('ownerId'); allow write: if false; }
   match /activityLogs/{id} { allow read: if owner('actorId'); allow write: if false; }
